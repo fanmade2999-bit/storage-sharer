@@ -4,11 +4,14 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.wifi.SoftApConfiguration
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import java.net.Inet4Address
 
 internal data class PocketHotspotCredentials(
     val ssid: String,
@@ -70,6 +73,62 @@ internal class PocketHotspotController(context: Context) {
     }
 
     fun isRunning(): Boolean = reservation != null
+
+
+    fun findHotspotHostAddress(
+        onFound: (String) -> Unit,
+        onFailed: () -> Unit
+    ) {
+        Thread {
+            repeat(20) {
+                val address = findCandidateAddress()
+                if (address != null) {
+                    Handler(Looper.getMainLooper()).post {
+                        onFound(address)
+                    }
+                    return@Thread
+                }
+                Thread.sleep(250)
+            }
+
+            Handler(Looper.getMainLooper()).post {
+                onFailed()
+            }
+        }.start()
+    }
+
+    private fun findCandidateAddress(): String? {
+        val connectivity =
+            appContext.getSystemService(ConnectivityManager::class.java)
+                ?: return null
+
+        for (network in connectivity.allNetworks) {
+            val capabilities = connectivity.getNetworkCapabilities(network) ?: continue
+            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+
+            val isLocalNetwork =
+                if (Build.VERSION.SDK_INT >= 35) {
+                    capabilities.hasCapability(
+                        NetworkCapabilities.NET_CAPABILITY_LOCAL_NETWORK
+                    )
+                } else {
+                    !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                }
+
+            if (!isLocalNetwork) continue
+
+            val links = connectivity.getLinkProperties(network)?.linkAddresses.orEmpty()
+            val address = links.firstOrNull { link ->
+                link.address is Inet4Address && !link.address.isLoopbackAddress
+            }?.address as? Inet4Address
+
+            if (address != null) {
+                return address.hostAddress
+            }
+        }
+
+        return null
+    }
 
     private fun hasRequiredPermission(): Boolean =
         if (Build.VERSION.SDK_INT >= 33) {
