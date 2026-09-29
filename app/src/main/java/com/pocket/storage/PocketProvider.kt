@@ -30,6 +30,7 @@ class PocketProvider : ContentProvider() {
         private const val METHOD_STAT = "stat"
         private const val METHOD_FELLOW_LIST = "fellow_list"
         private const val METHOD_FELLOW_REMOVE = "fellow_remove"
+        private const val METHOD_SETUP_TOKEN = "setup_token"
 
         private const val PATH_FILES = "files"
         private const val PATH_FILE = "file"
@@ -48,6 +49,7 @@ class PocketProvider : ContentProvider() {
     private lateinit var crypto: PocketFileCrypto
     private val ioExecutor = Executors.newCachedThreadPool()
     private lateinit var fellows: FellowSharerRegistry
+    private lateinit var setupTokens: PocketSetupToken
 
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
@@ -55,6 +57,7 @@ class PocketProvider : ContentProvider() {
         auth = AuthManager(ctx)
         crypto = PocketFileCrypto(PocketDataKey.get(ctx))
         fellows = FellowSharerRegistry(ctx)
+        setupTokens = PocketSetupToken(ctx)
         return true
     }
 
@@ -123,6 +126,11 @@ class PocketProvider : ContentProvider() {
                 val session = input.getString("session").orEmpty()
                 auth.requireSession(session)
                 fellowListBundle()
+            }
+
+            METHOD_SETUP_TOKEN -> Bundle().apply {
+                putString("token", setupTokens.issue())
+                putLong("expires_in_ms", 60_000L)
             }
 
             METHOD_FELLOW_REMOVE -> {
