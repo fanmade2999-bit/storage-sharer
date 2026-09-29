@@ -30,6 +30,7 @@ class PocketSetupActivity : Activity() {
         private const val SELECT_DEVICE_REQUEST_CODE = 4101
         private const val REQUEST_BLUETOOTH_CONNECT = 4102
         private const val REQUEST_BLUETOOTH_ADVERTISE = 4103
+        private const val REQUEST_FELLOW_BLE = 4104
     }
 
     private lateinit var labelInput: EditText
@@ -38,6 +39,9 @@ class PocketSetupActivity : Activity() {
     private lateinit var companionManager: CompanionDeviceManager
     private val executor: Executor = Executor { it.run() }
     private var pendingDevice: BluetoothDevice? = null
+    private var pendingAssociation: AssociationInfo? = null
+    private var gattClient: PocketGattClient? = null
+    private var gattServer: PocketGattServer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,11 +140,15 @@ class PocketSetupActivity : Activity() {
                 }
 
                 override fun onAssociationCreated(associationInfo: AssociationInfo) {
+                    pendingAssociation = associationInfo
                     val id = associationInfo.id
-                    val mac = associationInfo.deviceMacAddress?.toString()
+                    val mac = runCatching {
+                        associationInfo.deviceMacAddress?.toString()
+                    }.getOrNull()
                     registry.register(id, labelInput.text.toString(), mac)
                     startPresenceObservation(associationInfo)
                     status.text = "Registered fellow sharer #$id"
+                    connectIfReady()
                 }
 
                 override fun onFailure(errorMessage: CharSequence?) {
@@ -201,12 +209,20 @@ class PocketSetupActivity : Activity() {
             grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         ) {
             pendingDevice?.createBond()
+            connectIfReady()
         }
 
         if (requestCode == REQUEST_BLUETOOTH_ADVERTISE &&
             grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         ) {
             startAdvertising()
+        }
+
+        if (requestCode == REQUEST_FELLOW_BLE &&
+            grantResults.size >= 2 &&
+            grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+        ) {
+            startFellowBle()
         }
     }
 
@@ -226,29 +242,81 @@ class PocketSetupActivity : Activity() {
     }
 
     private fun startAdvertising() {
-        if (Build.VERSION.SDK_INT >= 31 &&
-            checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(
-                arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE),
-                REQUEST_BLUETOOTH_ADVERTISE
-            )
-            return
+        if (Build.VERSION.SDK_INT >= 31) {
+            val needed = mutableListOf<String>()
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                needed += Manifest.permission.BLUETOOTH_ADVERTISE
+            }
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                needed += Manifest.permission.BLUETOOTH_CONNECT
+            }
+            if (needed.isNotEmpty()) {
+                requestPermissions(needed.toTypedArray(), REQUEST_FELLOW_BLE)
+                return
+            }
         }
 
-        val started = PocketBle.startAdvertising(
+        startFellowBle()
+    }
+
+    private fun startFellowBle() {
+        gattServer?.stop()
+        gattServer = PocketGattServer(this) {
+            status.text = "Pocket BLE handshake authenticated."
+        }
+
+        val serverStarted = gattServer?.start() == true
+        val advertisingStarted = PocketBle.startAdvertising(
             this,
             PocketBle.newLoggingCallback()
         )
 
         status.text = when {
-            started -> "Advertising Pocket BLE until this setup screen closes."
-            else -> "Could not start BLE advertising. Check Bluetooth and permissions."
+            serverStarted && advertisingStarted ->
+                "Advertising Pocket BLE with GATT handshake support."
+            serverStarted ->
+                "GATT server started, but BLE advertising failed."
+            advertisingStarted ->
+                "BLE advertising started, but GATT server failed."
+            else ->
+                "Could not start Pocket BLE. Check Bluetooth and permissions."
         }
     }
 
+    private fun connectIfReady() {
+        val device = pendingDevice ?: return
+        val association = pendingAssociation ?: return
+
+        if (Build.VERSION.SDK_INT >= 31 &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+
+        gattClient?.close()
+        gattClient = PocketGattClient(
+            context = this,
+            device = device,
+            associationId = association.id,
+            registry = registry,
+            onAuthenticated = {
+                status.text = "Fellow sharer authenticated. Ready for connection."
+            },
+            onFailure = {
+                status.text = "BLE handshake failed: $it"
+            }
+        )
+
+        status.text = "Authenticating fellow sharer over BLE…"
+        gattClient?.connect()
+    }
+
     override fun onDestroy() {
+        gattClient?.close()
+        gattServer?.stop()
         PocketBle.stopAdvertising(this)
         super.onDestroy()
     }
