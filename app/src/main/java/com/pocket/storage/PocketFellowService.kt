@@ -36,9 +36,11 @@ class PocketFellowService : Service() {
     }
 
     private var gattServer: PocketGattServer? = null
+    private lateinit var wifiJoin: PocketWifiJoinController
 
     override fun onCreate() {
         super.onCreate()
+        wifiJoin = PocketWifiJoinController(applicationContext)
         createNotificationChannel()
     }
 
@@ -56,9 +58,19 @@ class PocketFellowService : Service() {
         )
 
         gattServer?.stop()
-        gattServer = PocketGattServer(applicationContext) { _, _ ->
-            updateNotification("Pocket owner authenticated")
-        }
+        gattServer = PocketGattServer(
+            applicationContext,
+            onAuthenticated = { _, _ ->
+                updateNotification("Pocket owner authenticated")
+            },
+            onNetworkCredentials = { ssid, password ->
+                val accepted = wifiJoin.suggestAndConnect(ssid, password)
+                if (accepted) {
+                    updateNotification("Wi-Fi network provisioned for Pocket connection")
+                }
+                accepted
+            }
+        )
 
         val serverStarted = gattServer?.start() == true
         val advertiserStarted =
