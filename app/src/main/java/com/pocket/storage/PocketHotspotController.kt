@@ -9,7 +9,6 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import java.util.concurrent.Executor
 
 internal data class PocketHotspotCredentials(
     val ssid: String,
@@ -22,8 +21,6 @@ internal class PocketHotspotController(context: Context) {
     private val wifiManager =
         appContext.getSystemService(WifiManager::class.java)
             ?: error("Wi-Fi service unavailable")
-
-    private val executor: Executor = Executor { it.run() }
 
     @Volatile
     private var reservation: WifiManager.LocalOnlyHotspotReservation? = null
@@ -59,15 +56,11 @@ internal class PocketHotspotController(context: Context) {
             }
         }
 
-        if (Build.VERSION.SDK_INT >= 30) {
-            wifiManager.startLocalOnlyHotspot(executor, callback)
-        } else {
-            @Suppress("DEPRECATION")
-            wifiManager.startLocalOnlyHotspot(
-                callback,
-                Handler(Looper.getMainLooper())
-            )
-        }
+        @Suppress("DEPRECATION")
+        wifiManager.startLocalOnlyHotspot(
+            callback,
+            Handler(Looper.getMainLooper())
+        )
         return true
     }
 
