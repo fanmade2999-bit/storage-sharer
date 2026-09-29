@@ -15,7 +15,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 internal class PocketGattServer(
     context: Context,
-    private val onAuthenticated: (BluetoothDevice, ByteArray) -> Unit = { _, _ -> }
+    private val onAuthenticated: (BluetoothDevice, ByteArray) -> Unit = { _, _ -> },
+    private val onNetworkCredentials: (String, String) -> Boolean = { _, _ -> false }
 ) {
 
     private val appContext = context.applicationContext
@@ -66,9 +67,16 @@ internal class PocketGattServer(
             BluetoothGattCharacteristic.PERMISSION_WRITE
         )
 
+        val network = BluetoothGattCharacteristic(
+            PocketGattProtocol.NETWORK_UUID,
+            BluetoothGattCharacteristic.PROPERTY_WRITE,
+            BluetoothGattCharacteristic.PERMISSION_WRITE
+        )
+
         service.addCharacteristic(challenge)
         service.addCharacteristic(response)
         service.addCharacteristic(confirm)
+        service.addCharacteristic(network)
 
         return server?.addService(service) == true
     }
@@ -135,6 +143,28 @@ internal class PocketGattServer(
                             nonce = challenge.nonce,
                             response = responseBytes
                         )
+
+                        sendResult(
+                            device,
+                            requestId,
+                            responseNeeded,
+                            BluetoothGatt.GATT_SUCCESS
+                        )
+                    }
+
+                    PocketGattProtocol.NETWORK_UUID -> {
+                        val session = sessions[deviceKey(device)]
+                            ?: error("no authenticated session")
+                        require(session.authenticated) { "BLE session is not authenticated" }
+
+                        if (device.bondState != BluetoothDevice.BOND_BONDED) {
+                            error("Wi-Fi credentials require a bonded BLE link")
+                        }
+
+                        val network = PocketGattProtocol.decodeNetworkCredentials(value)
+                        require(
+                            onNetworkCredentials(network.ssid, network.password)
+                        ) { "fellow phone rejected Wi-Fi credentials" }
 
                         sendResult(
                             device,
