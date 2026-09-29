@@ -53,7 +53,7 @@ internal class PocketTermuxBridge(context: Context) {
                 "sh",
                 "-lc",
                 "if [ -f ~/.pocket-web.pid ]; then " +
-                    "kill "$(cat ~/.pocket-web.pid)" 2>/dev/null || true; " +
+                    "kill \"$(cat ~/.pocket-web.pid)\" 2>/dev/null || true; " +
                     "rm -f ~/.pocket-web.pid; " +
                     "fi"
             ),
