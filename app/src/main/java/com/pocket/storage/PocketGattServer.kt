@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 internal class PocketGattServer(
     context: Context,
-    private val onAuthenticated: (BluetoothDevice) -> Unit = {}
+    private val onAuthenticated: (BluetoothDevice, ByteArray) -> Unit = { _, _ -> }
 ) {
 
     private val appContext = context.applicationContext
@@ -117,8 +117,7 @@ internal class PocketGattServer(
                 when (characteristic.uuid) {
                     PocketGattProtocol.CHALLENGE_UUID -> {
                         val challenge = PocketGattProtocol.decodeChallenge(value)
-                        val fellowPublicKey =
-                            PocketIdentity.ensure(appContext).public.encoded
+                        val fellowPublicKey = PocketIdentity.ensure(appContext).public.encoded
                         val transcript = PocketGattProtocol.signedTranscript(
                             challenge.ownerPublicKey,
                             challenge.nonce,
@@ -174,7 +173,7 @@ internal class PocketGattServer(
                             responseNeeded,
                             BluetoothGatt.GATT_SUCCESS
                         )
-                        onAuthenticated(device)
+                        onAuthenticated(device, transcript.fellowPublicKey)
                     }
 
                     else -> sendResult(
