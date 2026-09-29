@@ -27,6 +27,7 @@ class PocketSetupActivity : Activity() {
         const val ACTION_REGISTER = "com.pocket.storage.action.REGISTER"
         const val ACTION_ADVERTISE = "com.pocket.storage.action.ADVERTISE"
         const val ACTION_CONNECT = "com.pocket.storage.action.CONNECT"
+        const val ACTION_DISCONNECT = "com.pocket.storage.action.DISCONNECT"
 
         private const val SELECT_DEVICE_REQUEST_CODE = 4101
         private const val REQUEST_BLUETOOTH_CONNECT = 4102
@@ -45,16 +46,12 @@ class PocketSetupActivity : Activity() {
     private var gattClient: PocketGattClient? = null
     private var gattServer: PocketGattServer? = null
     private var pendingConnectAssociationId: Int? = null
-    private lateinit var hotspotController: PocketHotspotController
-    private lateinit var termuxBridge: PocketTermuxBridge
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         registry = FellowSharerRegistry(applicationContext)
         companionManager = getSystemService(CompanionDeviceManager::class.java)
-        hotspotController = PocketHotspotController(this)
-        termuxBridge = PocketTermuxBridge(this)
         PocketIdentity.ensure(applicationContext)
 
         val layout = LinearLayout(this).apply {
@@ -105,6 +102,10 @@ class PocketSetupActivity : Activity() {
             ACTION_REGISTER -> beginRegistration()
             ACTION_ADVERTISE -> startAdvertising()
             ACTION_CONNECT -> connectRegistered(intent.getIntExtra("association_id", -1))
+            ACTION_DISCONNECT -> {
+                PocketConnectionService.stop(this)
+                finish()
+            }
         }
     }
 
@@ -296,27 +297,6 @@ class PocketSetupActivity : Activity() {
         gattClient?.connect()
     }
 
-    private fun startLocalNetwork() {
-        val started = hotspotController.start(
-            onStarted = { credentials ->
-                val webStarted = termuxBridge.startPocketWeb(host = "0.0.0.0", port = 8787)
-                status.text = if (webStarted) {
-                    "Pocket Web is running on :8787. " +
-                        "SSID=${credentials.ssid} password=${credentials.password}"
-                } else {
-                    "Hotspot started, but Termux Web could not start."
-                }
-            },
-            onFailed = { reason ->
-                status.text = "Local-only hotspot failed: $reason"
-            }
-        )
-
-        if (!started) {
-            status.text = "Local-only hotspot permission is required."
-        }
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -442,8 +422,6 @@ class PocketSetupActivity : Activity() {
     override fun onDestroy() {
         gattClient?.close()
         gattServer?.stop()
-        hotspotController.stop()
-        termuxBridge.stopPocketWeb()
         PocketBle.stopAdvertising(this)
         super.onDestroy()
     }
