@@ -222,6 +222,7 @@ class PocketProvider : ContentProvider() {
         val target = PocketPaths.resolve(root, relativePath)
 
         if (!target.exists()) return 0
+        require(target.canonicalFile != root.canonicalFile) { "cannot delete Pocket root" }
         target.deleteRecursively()
         return 1
     }
@@ -248,6 +249,8 @@ class PocketProvider : ContentProvider() {
         val destination = PocketPaths.resolve(root, destinationPath)
 
         require(source.exists()) { "source does not exist" }
+        require(source.canonicalFile != root.canonicalFile) { "cannot rename Pocket root" }
+        require(destination.canonicalFile != root.canonicalFile) { "cannot replace Pocket root" }
         require(!destination.exists()) { "destination already exists" }
         destination.parentFile?.mkdirs()
         require(source.renameTo(destination)) { "rename failed" }
