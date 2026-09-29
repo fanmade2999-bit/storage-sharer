@@ -4,6 +4,9 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.security.KeyPair
+import java.security.KeyFactory
+import java.security.Signature
+import java.security.spec.X509EncodedKeySpec
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.util.Base64
@@ -41,4 +44,21 @@ internal object PocketIdentity {
 
     fun publicKeyBase64(context: Context): String =
         Base64.getEncoder().encodeToString(ensure(context).public.encoded)
+
+    fun sign(context: Context, message: ByteArray): ByteArray {
+        val signature = Signature.getInstance("SHA256withECDSA")
+        signature.initSign(ensure(context).private)
+        signature.update(message)
+        return signature.sign()
+    }
+
+    fun verify(publicKey: ByteArray, message: ByteArray, signatureBytes: ByteArray): Boolean =
+        runCatching {
+            val key = KeyFactory.getInstance("EC")
+                .generatePublic(X509EncodedKeySpec(publicKey))
+            Signature.getInstance("SHA256withECDSA").apply {
+                initVerify(key)
+                update(message)
+            }.verify(signatureBytes)
+        }.getOrDefault(false)
 }
