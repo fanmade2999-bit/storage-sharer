@@ -370,7 +370,11 @@ class PocketProvider : ContentProvider() {
         file.relativeTo(root).path.replace(File.separatorChar, '/'),
         file.name,
         file.isDirectory,
-        if (file.isFile) file.length() else 0L,
+        if (file.isFile) {
+            runCatching { crypto.plaintextSize(file) }.getOrElse { file.length() }
+        } else {
+            0L
+        },
         file.lastModified()
     )
 
