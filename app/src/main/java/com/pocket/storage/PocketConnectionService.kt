@@ -22,6 +22,9 @@ class PocketConnectionService : Service() {
         const val ACTION_FELLOW_NEAR = "com.pocket.storage.action.CONNECTION_FELLOW_NEAR"
         const val EXTRA_ASSOCIATION_ID = "association_id"
 
+        @Volatile
+        var activeAssociationId: Int? = null
+
         private const val CHANNEL_ID = "pocket_connection"
         private const val NOTIFICATION_ID = 8787
         private const val AWAY_GRACE_MILLIS = 30_000L
@@ -43,8 +46,7 @@ class PocketConnectionService : Service() {
         }
 
         fun notifyFellowPresence(context: Context, associationId: Int, nearby: Boolean) {
-            val state = PocketConnectionState(context)
-            if (state.activeAssociationId() != associationId) return
+            if (activeAssociationId != associationId) return
 
             val intent = Intent(context, PocketConnectionService::class.java).apply {
                 action = if (nearby) ACTION_FELLOW_NEAR else ACTION_FELLOW_AWAY
@@ -114,6 +116,7 @@ class PocketConnectionService : Service() {
             return
         }
 
+        activeAssociationId = associationId
         state.setActive(associationId)
         startForegroundCompat(buildNotification("Pocket connection active"))
 
@@ -196,6 +199,7 @@ class PocketConnectionService : Service() {
         handler.removeCallbacksAndMessages(null)
         hotspot.stop()
         termux.stopPocketWeb()
+        activeAssociationId = null
         state.clear()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
