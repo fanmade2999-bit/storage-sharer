@@ -63,8 +63,7 @@ internal class PocketFileCrypto(
                         }
                     } else {
                         FileInputStream(target).use { existing ->
-                            encryptChunks(existing, output)
-                            nextIndex = chunkCount(target.length())
+                            nextIndex = encryptChunks(existing, output)
                         }
                     }
 
@@ -151,7 +150,7 @@ internal class PocketFileCrypto(
         input: InputStream,
         output: OutputStream,
         startingIndex: Long = 0L
-    ) {
+    ): Long {
         val buffer = ByteArray(CHUNK_BYTES)
         var index = startingIndex
 
@@ -170,6 +169,8 @@ internal class PocketFileCrypto(
             index++
             if (count < CHUNK_BYTES) break
         }
+
+        return index
     }
 
     private fun reencryptChunks(input: InputStream, output: OutputStream): Long {
@@ -245,15 +246,6 @@ internal class PocketFileCrypto(
             .array()
         cipher.updateAAD(aad)
         return cipher
-    }
-
-    private fun chunkCount(fileLength: Long): Long {
-        if (fileLength <= HEADER_BYTES) return 0L
-        var position = HEADER_BYTES.toLong()
-        var count = 0L
-
-        FileInputStream(File("/dev/null")).use { }
-        throw UnsupportedOperationException("chunk count requires stream parsing")
     }
 
     private fun writeHeader(output: OutputStream) {
