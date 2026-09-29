@@ -90,6 +90,7 @@ class PocketProvider : ContentProvider() {
                 Bundle().apply {
                     putString("service", "Pocket Storage")
                     putString("version", "0.1.0")
+                    putString("device_public_key", PocketIdentity.publicKeyBase64(requireContext()))
                     putBoolean("must_change_password", auth.mustChangePassword)
                 }
             }
