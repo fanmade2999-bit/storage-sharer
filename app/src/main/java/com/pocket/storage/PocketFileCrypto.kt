@@ -79,6 +79,20 @@ internal class PocketFileCrypto(
         }
     }
 
+    fun migrateIfNeeded(target: File): Boolean {
+        if (!target.isFile || isEncrypted(target)) return false
+
+        withLock(target) {
+            if (!isEncrypted(target)) {
+                FileInputStream(target).use { input ->
+                    writeAtomicLocked(target, input)
+                }
+                return@withLock true
+            }
+            false
+        }
+    }
+
     fun readTo(source: File, output: OutputStream) {
         FileInputStream(source).use { input ->
             if (isEncrypted(source)) {
