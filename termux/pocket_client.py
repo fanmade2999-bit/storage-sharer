@@ -224,7 +224,7 @@ def write_file(path, source, append=False):
 
 def launch_setup(action):
     subprocess.run(
-        ["am", "start", "-n", "com.pocket.storage/.PocketSetupActivity", "-a", action],
+        ["/system/bin/am", "start", "-n", "com.pocket.storage/.PocketSetupActivity", "-a", action],
         check=True,
     )
 
@@ -236,6 +236,9 @@ def main():
     fs = fellow.add_subparsers(dest="fellow_cmd", required=True)
     fs.add_parser("register")
     fs.add_parser("advertise")
+    fs.add_parser("list")
+    fr = fs.add_parser("remove")
+    fr.add_argument("association_id", type=int)
     s.add_parser("ping")
     c = s.add_parser("connect"); c.add_argument("password", nargs="?")
     s.add_parser("disconnect")
@@ -286,6 +289,17 @@ def main():
                 launch_setup("com.pocket.storage.action.REGISTER")
             elif a.fellow_cmd == "advertise":
                 launch_setup("com.pocket.storage.action.ADVERTISE")
+            elif a.fellow_cmd == "list":
+                token = require_session()
+                result = call("fellow_list", (("session", "s", token),))
+                print(json.dumps(json.loads(result.get("fellows_json", "[]")), indent=2))
+            elif a.fellow_cmd == "remove":
+                token = require_session()
+                call(
+                    "fellow_remove",
+                    (("session", "s", token), ("association_id", "i", a.association_id)),
+                )
+                print(f"Removed fellow sharer #{a.association_id}.")
     except (OSError, RuntimeError, ValueError) as e:
         print(f"pocket: {e}", file=sys.stderr)
         return 1
