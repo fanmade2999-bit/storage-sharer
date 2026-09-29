@@ -21,6 +21,6 @@ curl -fsSL "$REPO_URL/pocket" -o "$TMP/pocket"
 curl -fsSL "$REPO_URL/bootstrap/install.sh" -o "$INSTALL"
 
 chmod 700 "$TMP/pocket" "$INSTALL"
-sh "$INSTALL"
+POCKET_SOURCE="$TMP" sh "$INSTALL"
 
 rm -rf "$TMP"
