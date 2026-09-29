@@ -12,6 +12,9 @@ case "${1:-}" in
     shift
     exec sh "$ROOT/bootstrap/install.sh" "$@"
     ;;
+  version)
+    exec python3 "$ROOT/pocket_version.py"
+    ;;
   *)
     exec python3 "$ROOT/pocket_client.py" "$@"
     ;;
