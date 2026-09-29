@@ -17,7 +17,8 @@ internal class PocketGattClient(
     private val associationId: Int,
     private val registry: FellowSharerRegistry,
     private val onAuthenticated: (String) -> Unit,
-    private val onFailure: (String) -> Unit
+    private val onFailure: (String) -> Unit,
+    private val onNetworkDelivered: () -> Unit = {}
 ) {
 
     private val appContext = context.applicationContext
@@ -167,6 +168,8 @@ internal class PocketGattClient(
                         Base64.NO_WRAP
                     )
                 )
+            } else if (characteristic.uuid == PocketGattProtocol.NETWORK_UUID) {
+                onNetworkDelivered()
                 close()
             }
         }
@@ -196,6 +199,22 @@ internal class PocketGattClient(
                 handleResponse(gatt, value)
             }
         }
+    }
+
+    fun sendNetworkCredentials(ssid: String, password: String): Boolean {
+        val currentGatt = gatt ?: return false
+        val service = currentGatt.getService(PocketBle.SERVICE_UUID) ?: return false
+        val characteristic =
+            service.getCharacteristic(PocketGattProtocol.NETWORK_UUID) ?: return false
+
+        val frame = runCatching {
+            PocketGattProtocol.encodeNetworkCredentials(ssid, password)
+        }.getOrElse {
+            onFailure(it.message ?: "invalid Wi-Fi credentials")
+            return false
+        }
+
+        return writeCharacteristic(currentGatt, characteristic, frame)
     }
 
     private fun handleResponse(gatt: BluetoothGatt, bytes: ByteArray) {
@@ -255,7 +274,7 @@ internal class PocketGattClient(
         gatt: BluetoothGatt,
         characteristic: BluetoothGattCharacteristic,
         value: ByteArray
-    ) {
+    ): Boolean {
         if (Build.VERSION.SDK_INT >= 33) {
             val status = gatt.writeCharacteristic(
                 characteristic,
@@ -264,8 +283,9 @@ internal class PocketGattClient(
             )
             if (status != android.bluetooth.BluetoothStatusCodes.SUCCESS) {
                 fail("BLE write rejected: $status")
+                return false
             }
-            return
+            return true
         }
 
         @Suppress("DEPRECATION", "MissingPermission")
@@ -275,7 +295,9 @@ internal class PocketGattClient(
             characteristic.value = value
             if (!gatt.writeCharacteristic(characteristic)) {
                 fail("BLE write rejected")
+                return false
             }
+            return true
         }
     }
 
