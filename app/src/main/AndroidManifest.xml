@@ -40,6 +40,11 @@
         </service>
 
         <service
+            android:name=".PocketFellowService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <service
             android:name=".PocketConnectionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
