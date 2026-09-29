@@ -58,7 +58,7 @@ class PocketSetupActivity : Activity() {
 
         labelInput = EditText(this).apply {
             hint = "Fellow sharer name"
-            singleLine = true
+            setSingleLine(true)
             setText("Fellow Sharer")
         }
 
