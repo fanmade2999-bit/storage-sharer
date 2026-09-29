@@ -45,12 +45,20 @@ class PocketSetupActivity : Activity() {
     private var pendingAssociation: AssociationInfo? = null
     private var gattClient: PocketGattClient? = null
     private var pendingConnectAssociationId: Int? = null
+    private lateinit var setupTokens: PocketSetupToken
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         registry = FellowSharerRegistry(applicationContext)
         companionManager = getSystemService(CompanionDeviceManager::class.java)
+        setupTokens = PocketSetupToken(applicationContext)
+
+        if (!setupTokens.consume(intent.getStringExtra("setup_token"))) {
+            finish()
+            return
+        }
+
         PocketIdentity.ensure(applicationContext)
 
         val layout = LinearLayout(this).apply {
