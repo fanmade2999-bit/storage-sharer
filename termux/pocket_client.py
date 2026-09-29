@@ -222,11 +222,11 @@ def write_file(path, source, append=False):
         raise RuntimeError(proc.stderr.decode(errors="replace").strip() or "write failed")
 
 
-def launch_setup(action):
-    subprocess.run(
-        ["/system/bin/am", "start", "-n", "com.pocket.storage/.PocketSetupActivity", "-a", action],
-        check=True,
-    )
+def launch_setup(action, extras=()):
+    command = ["/system/bin/am", "start", "-n", "com.pocket.storage/.PocketSetupActivity", "-a", action]
+    for key, value in extras:
+        command += ["--ei", key, str(value)]
+    subprocess.run(command, check=True)
 
 
 def main():
@@ -239,6 +239,9 @@ def main():
     fs.add_parser("list")
     fr = fs.add_parser("remove")
     fr.add_argument("association_id", type=int)
+    fc = fs.add_parser("connect")
+    fc.add_argument("association_id", type=int)
+    fs.add_parser("disconnect")
     s.add_parser("ping")
     c = s.add_parser("connect"); c.add_argument("password", nargs="?")
     s.add_parser("disconnect")
@@ -300,6 +303,13 @@ def main():
                     (("session", "s", token), ("association_id", "i", a.association_id)),
                 )
                 print(f"Removed fellow sharer #{a.association_id}.")
+            elif a.fellow_cmd == "connect":
+                launch_setup(
+                    "com.pocket.storage.action.CONNECT",
+                    (("association_id", a.association_id),),
+                )
+            elif a.fellow_cmd == "disconnect":
+                launch_setup("com.pocket.storage.action.DISCONNECT")
     except (OSError, RuntimeError, ValueError) as e:
         print(f"pocket: {e}", file=sys.stderr)
         return 1
