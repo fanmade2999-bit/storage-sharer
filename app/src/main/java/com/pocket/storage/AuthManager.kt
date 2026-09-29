@@ -14,6 +14,8 @@ internal class AuthManager(context: Context) {
         private const val KEY_SALT = "password_salt"
         private const val KEY_HASH = "password_hash"
         private const val KEY_MUST_CHANGE = "must_change"
+        private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
+        private const val KEY_LOCKED_UNTIL = "locked_until"
 
         private const val SESSION_TTL_MILLIS = 30 * 60 * 1000L
         private const val MAX_FAILED_ATTEMPTS = 5
@@ -25,11 +27,6 @@ internal class AuthManager(context: Context) {
 
     private val sessions = ConcurrentHashMap<String, Long>()
 
-    @Volatile
-    private var failedAttempts = 0
-
-    @Volatile
-    private var lockedUntil = 0L
 
     init {
         ensureInitialized()
@@ -53,6 +50,7 @@ internal class AuthManager(context: Context) {
         require(password.isNotEmpty()) { "password is required" }
 
         val now = System.currentTimeMillis()
+        val lockedUntil = prefs.getLong(KEY_LOCKED_UNTIL, 0L)
         require(now >= lockedUntil) {
             "authentication temporarily locked; retry later"
         }
@@ -62,15 +60,24 @@ internal class AuthManager(context: Context) {
         val actual = PasswordHasher.hash(password.toCharArray(), salt)
 
         if (!PasswordHasher.constantTimeEquals(actual, expected)) {
-            failedAttempts += 1
-            if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
-                failedAttempts = 0
-                lockedUntil = now + LOCKOUT_MILLIS
+            val attempts = prefs.getInt(KEY_FAILED_ATTEMPTS, 0) + 1
+            if (attempts >= MAX_FAILED_ATTEMPTS) {
+                prefs.edit()
+                    .putInt(KEY_FAILED_ATTEMPTS, 0)
+                    .putLong(KEY_LOCKED_UNTIL, now + LOCKOUT_MILLIS)
+                    .apply()
+            } else {
+                prefs.edit()
+                    .putInt(KEY_FAILED_ATTEMPTS, attempts)
+                    .apply()
             }
             error("authentication failed")
         }
 
-        failedAttempts = 0
+        prefs.edit()
+            .putInt(KEY_FAILED_ATTEMPTS, 0)
+            .putLong(KEY_LOCKED_UNTIL, 0L)
+            .apply()
 
         val tokenBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes)
