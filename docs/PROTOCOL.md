@@ -50,3 +50,15 @@ Pocket has separate controllers for the final connection phase:
 Neither controller is invoked by BLE presence callbacks. The intended order remains:
 
 `registered + nearby` → explicit user CONNECT → cryptographic BLE handshake → local-only hotspot → Pocket Web → fellow browser.
+
+
+## Network handoff
+
+After the BLE transcript is mutually authenticated and the connection is bonded, the owner sends a length-prefixed network frame containing:
+
+- local-only hotspot SSID
+- hotspot WPA2 passphrase
+- owner Pocket Web IPv4 endpoint
+- Pocket Web port
+
+The fellow phone uses Android's Wi-Fi network suggestion API for the hotspot and presents the handed-off Web endpoint to the user. Pocket Web is not bound to `0.0.0.0`; the owner resolves an address belonging to the local-only Wi-Fi network and binds Termux Web to that address.
