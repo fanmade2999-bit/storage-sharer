@@ -108,7 +108,7 @@ class PocketProvider : ContentProvider() {
                 statBundle(input.getString("path").orEmpty())
             }
 
-            else -> super.call(method, arg, extras)
+            else -> super.call(method, arg, extras) ?: Bundle()
         }
     }
 
