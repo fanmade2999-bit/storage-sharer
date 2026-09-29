@@ -1,6 +1,7 @@
 package com.pocket.storage
 
 import android.content.ContentProvider
+import android.companion.CompanionDeviceManager
 import android.content.ContentValues
 import android.database.Cursor
 import android.database.MatrixCursor
@@ -26,6 +27,8 @@ class PocketProvider : ContentProvider() {
         private const val METHOD_WHOAMI = "whoami"
         private const val METHOD_LS = "ls"
         private const val METHOD_STAT = "stat"
+        private const val METHOD_FELLOW_LIST = "fellow_list"
+        private const val METHOD_FELLOW_REMOVE = "fellow_remove"
 
         private const val PATH_FILES = "files"
         private const val PATH_FILE = "file"
@@ -41,6 +44,7 @@ class PocketProvider : ContentProvider() {
 
     private lateinit var root: File
     private lateinit var auth: AuthManager
+    private lateinit var fellows: FellowSharerRegistry
 
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
@@ -107,6 +111,20 @@ class PocketProvider : ContentProvider() {
                 auth.requireSession(session)
                 require(!auth.mustChangePassword) { "password change required" }
                 statBundle(input.getString("path").orEmpty())
+            }
+
+            METHOD_FELLOW_LIST -> {
+                val session = input.getString("session").orEmpty()
+                auth.requireSession(session)
+                fellowListBundle()
+            }
+
+            METHOD_FELLOW_REMOVE -> {
+                val session = input.getString("session").orEmpty()
+                auth.requireSession(session)
+                val id = input.getInt("association_id", -1)
+                require(id >= 0) { "association_id is required" }
+                removeFellow(id)
             }
 
             else -> super.call(method, arg, extras) ?: Bundle()
@@ -255,6 +273,52 @@ class PocketProvider : ContentProvider() {
         destination.parentFile?.mkdirs()
         require(source.renameTo(destination)) { "rename failed" }
         return 1
+    }
+
+    private fun fellowListBundle(): Bundle {
+        val json = org.json.JSONArray()
+        fellows.list().forEach { fellow ->
+            json.put(
+                org.json.JSONObject()
+                    .put("association_id", fellow.associationId)
+                    .put("label", fellow.label)
+                    .put("mac_address", fellow.macAddress)
+                    .put("registered_at", fellow.registeredAt)
+                    .put("nearby", fellow.nearby)
+                    .put("last_seen_at", fellow.lastSeenAt)
+            )
+        }
+        return Bundle().apply {
+            putString("fellows_json", json.toString())
+            putInt("count", fellows.list().size)
+        }
+    }
+
+    private fun removeFellow(associationId: Int): Bundle {
+        val fellow = fellows.get(associationId)
+            ?: error("fellow sharer not found")
+
+        val manager = requireContext().getSystemService(CompanionDeviceManager::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= 36) {
+            val request =
+                android.companion.ObservingDevicePresenceRequest.Builder()
+                    .setAssociationId(associationId)
+                    .build()
+            runCatching { manager.stopObservingDevicePresence(request) }
+        } else {
+            fellow.macAddress?.let {
+                @Suppress("DEPRECATION")
+                runCatching { manager.stopObservingDevicePresence(it) }
+            }
+        }
+
+        runCatching { manager.disassociate(associationId) }
+        fellows.remove(associationId)
+
+        return Bundle().apply {
+            putBoolean("ok", true)
+            putInt("association_id", associationId)
+        }
     }
 
     private fun listBundle(relativePath: String): Bundle {
