@@ -118,6 +118,8 @@ internal class AuthManager(context: Context) {
             .putString(KEY_HASH, encode(hash))
             .putBoolean(KEY_MUST_CHANGE, false)
             .apply()
+
+        sessions.clear()
     }
 
     fun disconnect(session: String) {
