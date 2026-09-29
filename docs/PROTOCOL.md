@@ -38,3 +38,15 @@ Pocket Web stores browser sessions in memory. It does not persist browser passwo
 ## BLE
 
 BLE is deliberately outside v0.1 of the Termux protocol. The later Android layer will use CompanionDeviceManager for registered-device association and presence observation, then perform Pocket cryptographic handshake before starting the local network path.
+
+
+## Local connection controllers
+
+Pocket has separate controllers for the final connection phase:
+
+- `PocketHotspotController` uses Android Local-Only Hotspot. It creates a device-to-device Wi-Fi network without Internet access.
+- `PocketTermuxBridge` uses Termux's external RunCommand service to start/stop Pocket Web.
+
+Neither controller is invoked by BLE presence callbacks. The intended order remains:
+
+`registered + nearby` → explicit user CONNECT → cryptographic BLE handshake → local-only hotspot → Pocket Web → fellow browser.
