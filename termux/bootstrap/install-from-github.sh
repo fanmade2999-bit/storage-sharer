@@ -16,6 +16,7 @@ mkdir -p "$TMP"
 
 curl -fsSL "$REPO_URL/pocket_client.py" -o "$TMP/pocket_client.py"
 curl -fsSL "$REPO_URL/pocket_web.py" -o "$TMP/pocket_web.py"
+curl -fsSL "$REPO_URL/pocket_version.py" -o "$TMP/pocket_version.py"
 curl -fsSL "$REPO_URL/pocket" -o "$TMP/pocket"
 curl -fsSL "$REPO_URL/bootstrap/install.sh" -o "$INSTALL"
 
