@@ -286,7 +286,7 @@ class PocketSetupActivity : Activity() {
             registry = registry,
             onAuthenticated = {
                 status.text = "Fellow authenticated. Starting local network…"
-                startLocalNetwork()
+                PocketConnectionService.start(this, associationId)
             },
             onFailure = {
                 status.text = "BLE connection failed: $it"
