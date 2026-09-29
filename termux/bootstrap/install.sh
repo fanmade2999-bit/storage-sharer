@@ -21,6 +21,7 @@ mkdir -p "$DEST" "$PREFIX/var/lib/pocket"
 install -m 700 "$SOURCE/pocket" "$DEST/pocket"
 install -m 600 "$SOURCE/pocket_client.py" "$DEST/pocket_client.py"
 install -m 600 "$SOURCE/pocket_web.py" "$DEST/pocket_web.py"
+install -m 600 "$SOURCE/pocket_version.py" "$DEST/pocket_version.py"
 
 ln -sf "$DEST/pocket" "$BIN/pocket"
 chmod 700 "$PREFIX/var/lib/pocket"
