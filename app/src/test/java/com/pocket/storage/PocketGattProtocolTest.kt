@@ -35,11 +35,18 @@ class PocketGattProtocolTest {
         val ssid = "Pocket-共享"
         val password = "pocket123456"
 
-        val encoded = PocketGattProtocol.encodeNetworkCredentials(ssid, password)
+        val encoded = PocketGattProtocol.encodeNetworkCredentials(
+            ssid = ssid,
+            password = password,
+            host = "192.168.43.1",
+            port = 8787
+        )
         val decoded = PocketGattProtocol.decodeNetworkCredentials(encoded)
 
         assertEquals(ssid, decoded.ssid)
         assertEquals(password, decoded.password)
+        assertEquals("192.168.43.1", decoded.host)
+        assertEquals(8787, decoded.port)
     }
 
     @Test
