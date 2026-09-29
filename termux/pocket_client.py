@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import getpass
 import os
 import re
 import subprocess
@@ -160,7 +161,11 @@ def lock():
 
 def change_password(password):
     token = require_session()
-    call("change_password", (("session", "s", token), ("new_password", "s", password)))
+    new_password = password or getpass.getpass("New Pocket password: ")
+    confirmation = getpass.getpass("Confirm Pocket password: ")
+    if new_password != confirmation:
+        raise ValueError("passwords do not match")
+    call("change_password", (("session", "s", token), ("new_password", "s", new_password)))
     print("Password changed.", file=sys.stderr)
 
 
@@ -292,7 +297,7 @@ def main():
     c = s.add_parser("connect"); c.add_argument("password", nargs="?")
     s.add_parser("disconnect")
     s.add_parser("lock")
-    c = s.add_parser("change-password"); c.add_argument("password")
+    c = s.add_parser("change-password"); c.add_argument("password", nargs="?")
     c = s.add_parser("ls"); c.add_argument("path", nargs="?", default="/")
     c = s.add_parser("stat"); c.add_argument("path")
     c = s.add_parser("mkdir"); c.add_argument("path")
