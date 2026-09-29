@@ -54,4 +54,22 @@ class PocketGattProtocolTest {
 
         assertEquals(false, a.contentEquals(b))
     }
+
+    @Test
+    fun networkCredentialsRoundTripPreservesEndpoint() {
+        val encoded = PocketGattProtocol.encodeNetworkCredentials(
+            ssid = "Pocket-ABC",
+            password = "correct-horse-123",
+            host = "192.168.43.1",
+            port = 8787
+        )
+
+        val decoded = PocketGattProtocol.decodeNetworkCredentials(encoded)
+
+        assertEquals("Pocket-ABC", decoded.ssid)
+        assertEquals("correct-horse-123", decoded.password)
+        assertEquals("192.168.43.1", decoded.host)
+        assertEquals(8787, decoded.port)
+    }
+
 }
