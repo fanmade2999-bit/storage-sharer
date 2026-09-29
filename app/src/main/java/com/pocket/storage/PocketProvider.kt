@@ -53,6 +53,8 @@ class PocketProvider : ContentProvider() {
         val ctx = context ?: return false
         root = PocketPaths.root(ctx)
         auth = AuthManager(ctx)
+        crypto = PocketFileCrypto(PocketDataKey.get(ctx))
+        fellows = FellowSharerRegistry(ctx)
         return true
     }
 
@@ -338,7 +340,10 @@ class PocketProvider : ContentProvider() {
     private fun listBundle(relativePath: String): Bundle {
         val target = if (relativePath.isBlank()) root else PocketPaths.resolve(root, relativePath)
         require(target.isDirectory) { "not a directory" }
-        val items = target.listFiles()?.sortedBy { it.name.lowercase() } ?: emptyList()
+        val items = target.listFiles()
+            ?.filterNot { it.name.startsWith(".pocket-") && it.name.endsWith(".tmp") }
+            ?.sortedBy { it.name.lowercase() }
+            ?: emptyList()
         return Bundle().apply {
             putString("path", if (relativePath.isBlank()) "/" else "/" + PocketPaths.cleanRelative(relativePath))
             putParcelableArrayList("items", ArrayList(items.map { fileBundle(it) }))
