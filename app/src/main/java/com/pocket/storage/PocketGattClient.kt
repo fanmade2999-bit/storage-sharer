@@ -27,6 +27,7 @@ internal class PocketGattClient(
     private var fellowPublicKey: ByteArray? = null
     private var transcript: ByteArray? = null
     private var responseHandled = false
+    private var closing = false
 
     fun connect(): Boolean {
         if (Build.VERSION.SDK_INT >= 31 &&
@@ -55,6 +56,7 @@ internal class PocketGattClient(
     }
 
     fun close() {
+        closing = true
         gatt?.disconnect()
         gatt?.close()
         gatt = null
@@ -82,8 +84,8 @@ internal class PocketGattClient(
                     gatt.discoverServices()
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                fail("BLE device disconnected")
-                close()
+                if (!closing) fail("BLE device disconnected")
+                gatt.close()
             }
         }
 
@@ -219,12 +221,19 @@ internal class PocketGattClient(
                 )
             ) { "fellow signature verification failed" }
 
+            val newPublicKeyBase64 =
+                Base64.encodeToString(response.fellowPublicKey, Base64.NO_WRAP)
+            val existing = registry.get(associationId)?.publicKeyBase64
+            require(existing == null || existing == newPublicKeyBase64) {
+                "fellow public identity changed"
+            }
+
             fellowPublicKey = response.fellowPublicKey
             transcript = transcriptBytes
 
             registry.setPublicKey(
                 associationId,
-                Base64.encodeToString(response.fellowPublicKey, Base64.NO_WRAP)
+                newPublicKeyBase64
             )
 
             val confirm =
