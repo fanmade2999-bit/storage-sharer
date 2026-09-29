@@ -31,6 +31,18 @@ class PocketGattProtocolTest {
     }
 
     @Test
+    fun networkCredentialsRoundTripPreservesUnicode() {
+        val ssid = "Pocket-共享"
+        val password = "pocket123456"
+
+        val encoded = PocketGattProtocol.encodeNetworkCredentials(ssid, password)
+        val decoded = PocketGattProtocol.decodeNetworkCredentials(encoded)
+
+        assertEquals(ssid, decoded.ssid)
+        assertEquals(password, decoded.password)
+    }
+
+    @Test
     fun transcriptChangesWhenFellowIdentityChanges() {
         val owner = ByteArray(16) { 1 }
         val nonce = ByteArray(32) { 2 }
