@@ -60,6 +60,7 @@ class PocketConnectionService : Service() {
     private lateinit var registry: FellowSharerRegistry
     private lateinit var hotspot: PocketHotspotController
     private lateinit var termux: PocketTermuxBridge
+    private var gattClient: PocketGattClient? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private var pendingAwayId: Int? = null
@@ -116,21 +117,76 @@ class PocketConnectionService : Service() {
             return
         }
 
+        val mac = fellow.macAddress
+        if (mac.isNullOrBlank()) {
+            stopSelf()
+            return
+        }
+
+        val manager =
+            getSystemService(android.bluetooth.BluetoothManager::class.java)
+        val adapter = manager?.adapter
+        if (adapter == null || !adapter.isEnabled) {
+            stopSelf()
+            return
+        }
+
+        val device = runCatching { adapter.getRemoteDevice(mac) }.getOrNull()
+        if (device == null) {
+            stopSelf()
+            return
+        }
+
         activeAssociationId = associationId
         state.setActive(associationId)
-        startForegroundCompat(buildNotification("Pocket connection active"))
+        startForegroundCompat(buildNotification("Authenticating fellow over BLE"))
 
+        gattClient?.close()
+        gattClient = PocketGattClient(
+            context = applicationContext,
+            device = device,
+            associationId = associationId,
+            registry = registry,
+            onAuthenticated = {
+                startLocalNetwork(associationId)
+            },
+            onFailure = {
+                updateNotification("BLE authentication failed")
+                stopSelf()
+            },
+            onNetworkDelivered = {
+                updateNotification("Pocket Web :8787 • fellow connected")
+            }
+        )
+
+        if (gattClient?.connect() != true) {
+            stopSelf()
+        }
+    }
+
+    private fun startLocalNetwork(associationId: Int) {
         val started = hotspot.start(
-            onStarted = {
+            onStarted = { credentials ->
                 val webStarted = termux.startPocketWeb(
                     host = "0.0.0.0",
                     port = 8787
                 )
+
                 if (!webStarted) {
                     stopSelf()
-                } else {
-                    updateNotification("Pocket Web :8787 • fellow connected")
+                    return@start
                 }
+
+                if (gattClient?.sendNetworkCredentials(
+                        credentials.ssid,
+                        credentials.password
+                    ) != true
+                ) {
+                    stopSelf()
+                    return@start
+                }
+
+                updateNotification("Wi-Fi ready • Pocket Web :8787")
             },
             onFailed = {
                 stopSelf()
