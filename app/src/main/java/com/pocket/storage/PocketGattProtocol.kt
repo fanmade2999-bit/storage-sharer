@@ -38,7 +38,9 @@ internal object PocketGattProtocol {
 
     data class NetworkCredentials(
         val ssid: String,
-        val password: String
+        val password: String,
+        val host: String,
+        val port: Int
     )
 
     fun encodeChallenge(
@@ -161,28 +163,42 @@ internal object PocketGattProtocol {
 
     fun encodeNetworkCredentials(
         ssid: String,
-        password: String
+        password: String,
+        host: String,
+        port: Int
     ): ByteArray {
         val ssidBytes = ssid.encodeToByteArray()
         val passwordBytes = password.encodeToByteArray()
+        val hostBytes = host.encodeToByteArray()
 
         require(ssidBytes.size in 1..32) { "SSID is invalid" }
         require(passwordBytes.size in 8..63) { "Wi-Fi password is invalid" }
+        require(hostBytes.size in 1..64) { "Web host is invalid" }
+        require(port in 1..65535) { "Web port is invalid" }
 
         return ByteBuffer
-            .allocate(NETWORK_MAGIC.size + 2 + ssidBytes.size + 2 + passwordBytes.size)
+            .allocate(
+                NETWORK_MAGIC.size +
+                    2 + ssidBytes.size +
+                    2 + passwordBytes.size +
+                    2 + hostBytes.size +
+                    2
+            )
             .order(ByteOrder.BIG_ENDIAN)
             .put(NETWORK_MAGIC)
             .putShort(ssidBytes.size.toShort())
             .put(ssidBytes)
             .putShort(passwordBytes.size.toShort())
             .put(passwordBytes)
+            .putShort(hostBytes.size.toShort())
+            .put(hostBytes)
+            .putShort(port.toShort())
             .array()
     }
 
     fun decodeNetworkCredentials(bytes: ByteArray): NetworkCredentials {
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
-        require(buffer.remaining() >= NETWORK_MAGIC.size + 4) {
+        require(buffer.remaining() >= NETWORK_MAGIC.size + 6) {
             "network frame too short"
         }
 
@@ -195,20 +211,28 @@ internal object PocketGattProtocol {
         val ssidLength = buffer.short.toInt()
         require(ssidLength in 1..32)
         require(buffer.remaining() >= ssidLength + 2)
-
         val ssidBytes = ByteArray(ssidLength)
         buffer.get(ssidBytes)
 
         val passwordLength = buffer.short.toInt()
         require(passwordLength in 8..63)
-        require(buffer.remaining() == passwordLength)
-
+        require(buffer.remaining() >= passwordLength + 2)
         val passwordBytes = ByteArray(passwordLength)
         buffer.get(passwordBytes)
 
+        val hostLength = buffer.short.toInt()
+        require(hostLength in 1..64)
+        require(buffer.remaining() == hostLength + 2)
+        val hostBytes = ByteArray(hostLength)
+        buffer.get(hostBytes)
+
+        val port = buffer.short.toInt() and 0xffff
+
         return NetworkCredentials(
             ssid = ssidBytes.decodeToString(),
-            password = passwordBytes.decodeToString()
+            password = passwordBytes.decodeToString(),
+            host = hostBytes.decodeToString(),
+            port = port
         )
     }
 }
