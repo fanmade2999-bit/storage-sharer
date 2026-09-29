@@ -1,6 +1,15 @@
 #!/data/data/com.termux/files/usr/bin/sh
 set -eu
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+if [ -f "$SCRIPT_DIR/pocket_client.py" ]; then
+    ROOT="$SCRIPT_DIR"
+else
+    ROOT="$PREFIX/share/pocket"
+fi
+
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 case "${1:-}" in
