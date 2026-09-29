@@ -49,6 +49,23 @@ class PocketFileCryptoTest {
     }
 
     @Test
+    fun appendAcrossChunkBoundaryPreservesAllData() {
+        val root = Files.createTempDirectory("pocket-test").toFile()
+        val file = root.resolve("boundary.bin")
+        val first = ByteArray(1_048_570) { 7 }
+        val second = ByteArray(32) { 9 }
+
+        val crypto = store()
+        crypto.writeAtomic(file, ByteArrayInputStream(first))
+        crypto.appendAtomic(file, ByteArrayInputStream(second))
+
+        val restored = ByteArrayOutputStream()
+        crypto.readTo(file, restored)
+
+        assertArrayEquals(first + second, restored.toByteArray())
+    }
+
+    @Test
     fun tamperedCiphertextIsRejected() {
         val root = Files.createTempDirectory("pocket-test").toFile()
         val file = root.resolve("tamper.bin")
