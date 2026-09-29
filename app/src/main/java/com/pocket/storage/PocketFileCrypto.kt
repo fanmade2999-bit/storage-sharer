@@ -36,7 +36,7 @@ internal class PocketFileCrypto(
     }
 
     fun writeAtomic(target: File, input: InputStream) {
-        withLock(target) {
+        return withLock(target) {
             writeAtomicLocked(target, input)
         }
     }
