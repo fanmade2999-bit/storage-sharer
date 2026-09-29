@@ -21,14 +21,12 @@ class PocketCompanionService : CompanionDeviceService() {
         when (event.event) {
             DevicePresenceEvent.EVENT_BLE_APPEARED,
             DevicePresenceEvent.EVENT_BT_CONNECTED -> {
-                registry.markNearby(id, true)
-                Log.i("PocketBle", "Fellow association $id is nearby")
+                updatePresence(id, true)
             }
 
             DevicePresenceEvent.EVENT_BLE_DISAPPEARED,
             DevicePresenceEvent.EVENT_BT_DISCONNECTED -> {
-                registry.markNearby(id, false)
-                Log.i("PocketBle", "Fellow association $id is no longer nearby")
+                updatePresence(id, false)
             }
         }
 
@@ -37,11 +35,21 @@ class PocketCompanionService : CompanionDeviceService() {
 
     @Suppress("DEPRECATION")
     override fun onDeviceAppeared(associationInfo: AssociationInfo) {
-        registry.markNearby(associationInfo.id, true)
+        updatePresence(associationInfo.id, true)
     }
 
     @Suppress("DEPRECATION")
     override fun onDeviceDisappeared(associationInfo: AssociationInfo) {
-        registry.markNearby(associationInfo.id, false)
+        updatePresence(associationInfo.id, false)
+    }
+
+    private fun updatePresence(id: Int, nearby: Boolean) {
+        registry.markNearby(id, nearby)
+        PocketConnectionService.notifyFellowPresence(
+            applicationContext,
+            id,
+            nearby
+        )
+        Log.i("PocketBle", "Fellow association $id nearby=$nearby")
     }
 }
