@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
 internal class PocketGattServer(
     context: Context,
     private val onAuthenticated: (BluetoothDevice, ByteArray) -> Unit = { _, _ -> },
-    private val onNetworkCredentials: (String, String) -> Boolean = { _, _ -> false }
+    private val onNetworkCredentials: (PocketGattProtocol.NetworkCredentials) -> Boolean = { false }
 ) {
 
     private val appContext = context.applicationContext
@@ -163,7 +163,7 @@ internal class PocketGattServer(
 
                         val network = PocketGattProtocol.decodeNetworkCredentials(value)
                         require(
-                            onNetworkCredentials(network.ssid, network.password)
+                            onNetworkCredentials(network)
                         ) { "fellow phone rejected Wi-Fi credentials" }
 
                         sendResult(
