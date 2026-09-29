@@ -273,7 +273,22 @@ def doctor():
 
 
 def launch_setup(action, extras=()):
-    command = ["/system/bin/am", "start", "-n", "com.pocket.storage/.PocketSetupActivity", "-a", action]
+    setup = call("setup_token")
+    token = setup.get("token")
+    if not token:
+        raise RuntimeError("Pocket did not return a setup token")
+
+    command = [
+        "/system/bin/am",
+        "start",
+        "-n",
+        "com.pocket.storage/.PocketSetupActivity",
+        "-a",
+        action,
+        "--es",
+        "setup_token",
+        token,
+    ]
     for key, value in extras:
         command += ["--ei", key, str(value)]
     subprocess.run(command, check=True)
