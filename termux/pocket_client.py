@@ -222,9 +222,20 @@ def write_file(path, source, append=False):
         raise RuntimeError(proc.stderr.decode(errors="replace").strip() or "write failed")
 
 
+def launch_setup(action):
+    subprocess.run(
+        ["am", "start", "-n", "com.pocket.storage/.PocketSetupActivity", "-a", action],
+        check=True,
+    )
+
+
 def main():
     p = argparse.ArgumentParser(prog="pocket")
     s = p.add_subparsers(dest="cmd", required=True)
+    fellow = s.add_parser("fellow")
+    fs = fellow.add_subparsers(dest="fellow_cmd", required=True)
+    fs.add_parser("register")
+    fs.add_parser("advertise")
     s.add_parser("ping")
     c = s.add_parser("connect"); c.add_argument("password", nargs="?")
     s.add_parser("disconnect")
@@ -270,6 +281,11 @@ def main():
             write_file(a.path, a.source)
         elif a.cmd == "append":
             write_file(a.path, a.source, append=True)
+        elif a.cmd == "fellow":
+            if a.fellow_cmd == "register":
+                launch_setup("com.pocket.storage.action.REGISTER")
+            elif a.fellow_cmd == "advertise":
+                launch_setup("com.pocket.storage.action.ADVERTISE")
     except (OSError, RuntimeError, ValueError) as e:
         print(f"pocket: {e}", file=sys.stderr)
         return 1
