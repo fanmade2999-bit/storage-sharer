@@ -4,7 +4,7 @@ set -eu
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 DEST="$PREFIX/share/pocket"
 BIN="$PREFIX/bin"
-SOURCE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SOURCE="${POCKET_SOURCE:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
 
 if ! command -v python3 >/dev/null 2>&1; then
     if command -v pkg >/dev/null 2>&1; then
