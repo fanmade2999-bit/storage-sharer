@@ -341,7 +341,10 @@ class PocketSetupActivity : Activity() {
             companionManager.startObservingDevicePresence(request)
         } else {
             @Suppress("DEPRECATION")
-            associationInfo.deviceMacAddress?.toString()?.let {
+            runCatching {
+                associationInfo.deviceMacAddress?.toString()
+            }.getOrNull()?.let {
+                @Suppress("DEPRECATION")
                 companionManager.startObservingDevicePresence(it)
             }
         }
