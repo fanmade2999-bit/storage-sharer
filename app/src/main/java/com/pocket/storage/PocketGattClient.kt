@@ -201,14 +201,19 @@ internal class PocketGattClient(
         }
     }
 
-    fun sendNetworkCredentials(ssid: String, password: String): Boolean {
+    fun sendNetworkCredentials(
+        ssid: String,
+        password: String,
+        host: String,
+        port: Int
+    ): Boolean {
         val currentGatt = gatt ?: return false
         val service = currentGatt.getService(PocketBle.SERVICE_UUID) ?: return false
         val characteristic =
             service.getCharacteristic(PocketGattProtocol.NETWORK_UUID) ?: return false
 
         val frame = runCatching {
-            PocketGattProtocol.encodeNetworkCredentials(ssid, password)
+            PocketGattProtocol.encodeNetworkCredentials(ssid, password, host, port)
         }.getOrElse {
             onFailure(it.message ?: "invalid Wi-Fi credentials")
             return false
