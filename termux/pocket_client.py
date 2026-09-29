@@ -57,7 +57,7 @@ def parse_rows(data):
         if not line.startswith("Row:"):
             continue
         row = {}
-        for m in re.finditer(r"([A-Za-z0-9_]+)=((?:(?!, [A-Za-z0-9_]+=).)*)", line[4:].strip()):
+        for m in re.finditer(r"(?:^|\\s)([A-Za-z0-9_]+)=((?:(?!\\s[A-Za-z0-9_]+=).)*)", line[4:].strip()):
             row[m.group(1)] = m.group(2).strip()
         if row:
             row["is_directory"] = row.get("is_directory") == "true"
@@ -111,6 +111,14 @@ def normalize(path):
 def rel(path):
     value = normalize(path)
     return value[1:]
+
+
+def files_uri(path, token):
+    return uri("files", path, token)
+
+
+def file_uri(path, token, append=False):
+    return uri("file", path, token, append=append)
 
 
 def uri(kind, path, token, append=False):
