@@ -2,49 +2,133 @@
 
 Pocket Storage is the Android storage owner for the Pocket ecosystem.
 
-## Phase 1
+## Current architecture
 
-This repository currently contains:
+```
+Fellow phone
+   │
+   │ BLE presence / authenticated GATT
+   ▼
+Pocket BLE ──► Pocket Connection Service
+                    │
+                    ├── local-only Wi-Fi hotspot
+                    │
+                    └── Termux Pocket Web :8787
+                              │
+                              ▼
+                       Pocket Storage API
+                              │
+                              ▼
+                         app-private files
+```
 
-- **Pocket Storage Android app** — headless package with app-private storage.
-- **Authentication** — bootstrap password `pocket`, stored as a salted PBKDF2 verifier; first successful connection is marked **must change password**.
-- **Sessions** — random bearer tokens with a 30-minute sliding lifetime; `lock` revokes active sessions.
-- **Filesystem API** — list/stat through `query`, file streaming through `openFile`, plus create, rename, and recursive delete.
-- **Path boundary** — canonical-path validation blocks traversal outside Pocket's private root.
-- **GitHub Actions CI** — unit tests and a debug APK build on pushes and pull requests.
+The Android package owns its private data. Termux is a client and gateway; it never mounts Pocket's private directory.
 
-Pocket's files live below the Android app's private `filesDir/pocket` directory. The Termux/web layers are intended to call this controlled provider API rather than mount or expose that directory directly.
+## Current repository
 
-## Provider
+### Android
 
-Authority:
+- **Pocket Storage** — headless Android package, private file root, authentication and ContentProvider API.
+- **Pocket Identity** — Android Keystore EC signing identity.
+- **Pocket BLE** — low-power advertising using a fixed Pocket service UUID.
+- **Companion registration** — Android CompanionDeviceManager association and presence observation.
+- **Pocket GATT** — challenge/response mutual authentication with device-identity pinning.
+- **Pocket Fellow Service** — persistent fellow-phone BLE advertising/GATT service.
+- **Pocket Connection Service** — persistent owner-side active connection lifecycle, local-only hotspot and Termux Web startup.
+- **Pocket Hotspot Controller** — Android LocalOnlyHotspot integration.
+- **Pocket Termux Bridge** — controlled Termux RunCommand startup/shutdown for Pocket Web.
 
-`com.pocket.storage.provider`
+### Termux
 
-Base URI:
+- **Pocket CLI** — `pocket connect`, `ls`, `read`, `write`, `append`, `mkdir`, `rename`, `delete`, fellow-device commands, and diagnostics.
+- **Pocket Web** — browser file UI on port `8787`.
+- **Pocket Bootstrap** — reusable installer for a fresh Termux environment.
+- **Protocol docs** — current IPC and connection-layer contract.
 
-`content://com.pocket.storage.provider`
+## Fresh Termux setup
 
-Provider call methods:
+Install the bootstrap once:
 
-`ping`, `connect`, `whoami`, `change_password`, `disconnect`, `lock`
+```sh
+pkg install -y curl
+curl -fsSL https://raw.githubusercontent.com/fanmade2999-bit/storage-sharer/main/termux/bootstrap/install-from-github.sh | sh
+```
 
-The provider is intentionally exported so a client such as Termux can reach it through Android IPC. Authentication is required for file operations.
+Then:
 
-## Planned phases
+```sh
+pocket version
+pocket doctor
+pocket connect
+```
 
-**Phase 2 — Pocket Web / CLI**
+For Android to start Pocket Web through Termux's external command interface, enable Termux external apps in `~/.termux/termux.properties`:
 
-Add the Termux gateway, browser interface on port `8787`, and deployment/bootstrap tooling.
+```
+allow-external-apps=true
+```
 
-**Phase 3 — Pocket BLE**
+Restart Termux after changing that setting.
 
-Add companion-device registration, presence observation, and cryptographic device authentication.
+## First Pocket login
 
-**Phase 4 — Connection flow**
+A fresh Pocket installation starts with the bootstrap password:
 
-Add explicit CONNECT → BLE handshake → local-only hotspot → Pocket Web connection.
+```
+pocket
+```
+
+The first successful connection is intentionally marked `must_change_password`. Change it before filesystem operations:
+
+```sh
+pocket change-password
+```
+
+The password itself is not persisted in plaintext.
+
+## Fellow sharer flow
+
+On the fellow phone:
+
+```sh
+pocket fellow advertise
+```
+
+On the owner phone:
+
+```sh
+pocket fellow register
+```
+
+Android shows its companion-device selection/consent UI. After association, Pocket performs its own cryptographic GATT handshake and records the fellow public identity.
+
+Presence is only a proximity state. It does not start Wi-Fi, Pocket Web, or file access.
+
+To explicitly connect an already-registered nearby fellow:
+
+```sh
+pocket fellow list
+pocket fellow connect <association_id>
+```
+
+The owner performs a fresh BLE handshake before the connection service starts the local-only hotspot and Pocket Web.
+
+To disconnect:
+
+```sh
+pocket fellow disconnect
+```
+
+To revoke a fellow association:
+
+```sh
+pocket fellow remove <association_id>
+```
 
 ## Security status
 
-This is experimental software and has not received an independent security audit. The default bootstrap password must be changed on first use.
+This is experimental software and has not received an independent security audit.
+
+The current release protects data primarily through the Android application sandbox, authenticated IPC, session tokens, path-boundary checks, and Keystore-backed device identity.
+
+**Not yet complete:** encrypted file-at-rest storage, automatic encrypted Wi-Fi credential handoff/auto-join on the fellow phone, and device-authenticated Web sessions. Those are separate layers and are not being silently approximated by the current prototype.
