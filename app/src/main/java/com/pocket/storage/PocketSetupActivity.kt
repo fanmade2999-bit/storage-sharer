@@ -32,6 +32,7 @@ class PocketSetupActivity : Activity() {
         private const val REQUEST_BLUETOOTH_CONNECT = 4102
         private const val REQUEST_BLUETOOTH_ADVERTISE = 4103
         private const val REQUEST_FELLOW_BLE = 4104
+        private const val REQUEST_CONNECTION_PERMISSIONS = 4105
     }
 
     private lateinit var labelInput: EditText
@@ -43,12 +44,17 @@ class PocketSetupActivity : Activity() {
     private var pendingAssociation: AssociationInfo? = null
     private var gattClient: PocketGattClient? = null
     private var gattServer: PocketGattServer? = null
+    private var pendingConnectAssociationId: Int? = null
+    private lateinit var hotspotController: PocketHotspotController
+    private lateinit var termuxBridge: PocketTermuxBridge
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         registry = FellowSharerRegistry(applicationContext)
         companionManager = getSystemService(CompanionDeviceManager::class.java)
+        hotspotController = PocketHotspotController(this)
+        termuxBridge = PocketTermuxBridge(this)
         PocketIdentity.ensure(applicationContext)
 
         val layout = LinearLayout(this).apply {
@@ -98,6 +104,7 @@ class PocketSetupActivity : Activity() {
         when (intent.action) {
             ACTION_REGISTER -> beginRegistration()
             ACTION_ADVERTISE -> startAdvertising()
+            ACTION_CONNECT -> connectRegistered(intent.getIntExtra("association_id", -1))
         }
     }
 
@@ -195,7 +202,10 @@ class PocketSetupActivity : Activity() {
                 REQUEST_BLUETOOTH_CONNECT
             )
         } else {
-            device.createBond()
+            if (device != null) {
+                device.createBond()
+                connectIfReady()
+            }
         }
     }
 
@@ -318,6 +328,7 @@ class PocketSetupActivity : Activity() {
             grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         ) {
             pendingDevice?.createBond()
+            pendingAssociation?.let(::startPresenceObservation)
             connectIfReady()
         }
 
@@ -328,10 +339,15 @@ class PocketSetupActivity : Activity() {
         }
 
         if (requestCode == REQUEST_FELLOW_BLE &&
-            grantResults.size >= 2 &&
             grantResults.all { it == PackageManager.PERMISSION_GRANTED }
         ) {
             startFellowBle()
+        }
+
+        if (requestCode == REQUEST_CONNECTION_PERMISSIONS &&
+            grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+        ) {
+            pendingConnectAssociationId?.let(::connectRegisteredNow)
         }
     }
 
@@ -426,6 +442,8 @@ class PocketSetupActivity : Activity() {
     override fun onDestroy() {
         gattClient?.close()
         gattServer?.stop()
+        hotspotController.stop()
+        termuxBridge.stopPocketWeb()
         PocketBle.stopAdvertising(this)
         super.onDestroy()
     }
