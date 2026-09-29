@@ -26,6 +26,7 @@ class PocketSetupActivity : Activity() {
     companion object {
         const val ACTION_REGISTER = "com.pocket.storage.action.REGISTER"
         const val ACTION_ADVERTISE = "com.pocket.storage.action.ADVERTISE"
+        const val ACTION_CONNECT = "com.pocket.storage.action.CONNECT"
 
         private const val SELECT_DEVICE_REQUEST_CODE = 4101
         private const val REQUEST_BLUETOOTH_CONNECT = 4102
@@ -195,6 +196,114 @@ class PocketSetupActivity : Activity() {
             )
         } else {
             device.createBond()
+        }
+    }
+
+
+    private fun connectRegistered(associationId: Int) {
+        if (associationId < 0) {
+            status.text = "association_id is required."
+            return
+        }
+
+        val fellow = registry.get(associationId)
+        if (fellow == null) {
+            status.text = "Fellow sharer #$associationId is not registered."
+            return
+        }
+
+        if (!fellow.nearby) {
+            status.text = "Fellow sharer is not currently nearby."
+            return
+        }
+
+        pendingConnectAssociationId = associationId
+        val missing = mutableListOf<String>()
+
+        if (Build.VERSION.SDK_INT >= 31 &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            missing += Manifest.permission.BLUETOOTH_CONNECT
+        }
+
+        val wifiPermission = if (Build.VERSION.SDK_INT >= 33) {
+            Manifest.permission.NEARBY_WIFI_DEVICES
+        } else {
+            Manifest.permission.ACCESS_FINE_LOCATION
+        }
+
+        if (checkSelfPermission(wifiPermission) != PackageManager.PERMISSION_GRANTED) {
+            missing += wifiPermission
+        }
+
+        if (missing.isNotEmpty()) {
+            requestPermissions(missing.toTypedArray(), REQUEST_CONNECTION_PERMISSIONS)
+            return
+        }
+
+        connectRegisteredNow(associationId)
+    }
+
+    private fun connectRegisteredNow(associationId: Int) {
+        val fellow = registry.get(associationId)
+        val mac = fellow?.macAddress
+        if (fellow == null || mac.isNullOrBlank()) {
+            status.text = "Fellow BLE address is unavailable."
+            return
+        }
+
+        val bluetoothManager =
+            getSystemService(android.bluetooth.BluetoothManager::class.java)
+        val adapter = bluetoothManager?.adapter
+        if (adapter == null || !adapter.isEnabled) {
+            status.text = "Bluetooth is disabled."
+            return
+        }
+
+        val device = runCatching { adapter.getRemoteDevice(mac) }.getOrNull()
+        if (device == null) {
+            status.text = "Could not resolve fellow BLE device."
+            return
+        }
+
+        gattClient?.close()
+        gattClient = PocketGattClient(
+            context = this,
+            device = device,
+            associationId = associationId,
+            registry = registry,
+            onAuthenticated = {
+                status.text = "Fellow authenticated. Starting local network…"
+                startLocalNetwork()
+            },
+            onFailure = {
+                status.text = "BLE connection failed: $it"
+            }
+        )
+
+        status.text = "Re-authenticating fellow sharer over BLE…"
+        gattClient?.connect()
+    }
+
+    private fun startLocalNetwork() {
+        val started = hotspotController.start(
+            onStarted = { credentials ->
+                val webStarted = termuxBridge.startPocketWeb(host = "0.0.0.0", port = 8787)
+                status.text = if (webStarted) {
+                    "Pocket Web is running on :8787. " +
+                        "SSID=${credentials.ssid} password=${credentials.password}"
+                } else {
+                    "Hotspot started, but Termux Web could not start."
+                }
+            },
+            onFailed = { reason ->
+                status.text = "Local-only hotspot failed: $reason"
+            }
+        )
+
+        if (!started) {
+            status.text = "Local-only hotspot permission is required."
         }
     }
 
