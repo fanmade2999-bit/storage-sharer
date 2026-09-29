@@ -44,7 +44,6 @@ class PocketSetupActivity : Activity() {
     private var pendingDevice: BluetoothDevice? = null
     private var pendingAssociation: AssociationInfo? = null
     private var gattClient: PocketGattClient? = null
-    private var gattServer: PocketGattServer? = null
     private var pendingConnectAssociationId: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -321,7 +320,9 @@ class PocketSetupActivity : Activity() {
         if (requestCode == REQUEST_FELLOW_BLE &&
             grantResults.all { it == PackageManager.PERMISSION_GRANTED }
         ) {
-            startFellowBle()
+            PocketFellowService.start(this)
+            status.text = "Pocket fellow mode started."
+            finish()
         }
 
         if (requestCode == REQUEST_CONNECTION_PERMISSIONS &&
@@ -365,31 +366,9 @@ class PocketSetupActivity : Activity() {
             }
         }
 
-        startFellowBle()
-    }
-
-    private fun startFellowBle() {
-        gattServer?.stop()
-        gattServer = PocketGattServer(this) { _, _ ->
-            status.text = "Pocket BLE handshake authenticated."
-        }
-
-        val serverStarted = gattServer?.start() == true
-        val advertisingStarted = PocketBle.startAdvertising(
-            this,
-            PocketBle.newLoggingCallback()
-        )
-
-        status.text = when {
-            serverStarted && advertisingStarted ->
-                "Advertising Pocket BLE with GATT handshake support."
-            serverStarted ->
-                "GATT server started, but BLE advertising failed."
-            advertisingStarted ->
-                "BLE advertising started, but GATT server failed."
-            else ->
-                "Could not start Pocket BLE. Check Bluetooth and permissions."
-        }
+        PocketFellowService.start(this)
+        status.text = "Pocket fellow mode started."
+        finish()
     }
 
     private fun connectIfReady() {
@@ -421,7 +400,6 @@ class PocketSetupActivity : Activity() {
 
     override fun onDestroy() {
         gattClient?.close()
-        gattServer?.stop()
         PocketBle.stopAdvertising(this)
         super.onDestroy()
     }
