@@ -12,6 +12,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.Executors
 
 class PocketProvider : ContentProvider() {
 
@@ -44,6 +45,8 @@ class PocketProvider : ContentProvider() {
 
     private lateinit var root: File
     private lateinit var auth: AuthManager
+    private lateinit var crypto: PocketFileCrypto
+    private val ioExecutor = Executors.newCachedThreadPool()
     private lateinit var fellows: FellowSharerRegistry
 
     override fun onCreate(): Boolean {
@@ -153,6 +156,7 @@ class PocketProvider : ContentProvider() {
 
         if (target.isDirectory) {
             target.listFiles()
+                ?.filterNot { it.name.startsWith(".pocket-") && it.name.endsWith(".tmp") }
                 ?.sortedBy { it.name.lowercase() }
                 ?.forEach { cursor.addRow(fileRow(it)) }
         } else {
@@ -179,28 +183,38 @@ class PocketProvider : ContentProvider() {
 
         if (mode.contains('w')) {
             target.parentFile?.mkdirs()
-            if (!target.exists()) target.createNewFile()
             val append = uri.getQueryParameter("append") == "true"
+            val pipes = ParcelFileDescriptor.createPipe()
 
-            return ParcelFileDescriptor.open(
-                target,
-                if (append) {
-                    ParcelFileDescriptor.MODE_CREATE or
-                        ParcelFileDescriptor.MODE_WRITE_ONLY or
-                        ParcelFileDescriptor.MODE_APPEND
-                } else {
-                    ParcelFileDescriptor.MODE_CREATE or
-                        ParcelFileDescriptor.MODE_WRITE_ONLY or
-                        ParcelFileDescriptor.MODE_TRUNCATE
+            ioExecutor.execute {
+                ParcelFileDescriptor.AutoCloseInputStream(pipes[0]).use { input ->
+                    runCatching {
+                        if (append) {
+                            crypto.appendAtomic(target, input)
+                        } else {
+                            crypto.writeAtomic(target, input)
+                        }
+                    }
                 }
-            )
+            }
+
+            return pipes[1]
         }
 
         if (!target.exists() || target.isDirectory) {
             throw FileNotFoundException("file does not exist")
         }
 
-        return ParcelFileDescriptor.open(target, ParcelFileDescriptor.MODE_READ_ONLY)
+        val pipes = ParcelFileDescriptor.createPipe()
+        ioExecutor.execute {
+            ParcelFileDescriptor.AutoCloseOutputStream(pipes[1]).use { output ->
+                runCatching {
+                    crypto.readTo(target, output)
+                }
+            }
+        }
+
+        return pipes[0]
     }
 
     override fun insert(uri: Uri, values: ContentValues?): Uri {
@@ -220,7 +234,7 @@ class PocketProvider : ContentProvider() {
             "file" -> {
                 target.parentFile?.mkdirs()
                 if (!target.exists()) {
-                    require(target.createNewFile()) { "unable to create file" }
+                    crypto.createEmpty(target)
                 }
             }
             else -> error("unsupported kind")
@@ -341,7 +355,14 @@ class PocketProvider : ContentProvider() {
         putString("path", "/" + file.relativeTo(root).path.replace(File.separatorChar, '/'))
         putString("name", file.name)
         putBoolean("is_directory", file.isDirectory)
-        putLong("size", if (file.isFile) file.length() else 0L)
+        putLong(
+            "size",
+            if (file.isFile) {
+                runCatching { crypto.plaintextSize(file) }.getOrElse { file.length() }
+            } else {
+                0L
+            }
+        )
         putLong("modified", file.lastModified())
     }
 
