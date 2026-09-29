@@ -82,9 +82,10 @@ The first successful connection is intentionally marked `must_change_password`. 
 
 ```sh
 pocket change-password
+pocket migrate
 ```
 
-The password itself is not persisted in plaintext.
+The password itself is not persisted in plaintext. pocket migrate converts legacy plaintext files from older Pocket builds into encrypted AES-GCM storage.
 
 ## Fellow sharer flow
 
