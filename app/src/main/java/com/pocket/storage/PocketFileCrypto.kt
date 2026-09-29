@@ -48,31 +48,34 @@ internal class PocketFileCrypto(
                 return@withLock
             }
 
-            val plaintextTemp = tempFile(target, "plain")
+            target.parentFile?.mkdirs()
+            val temp = tempFile(target, "enc")
+
             try {
-                FileOutputStream(plaintextTemp).use { output ->
+                var nextIndex = 0L
+
+                FileOutputStream(temp).use { output ->
+                    writeHeader(output)
+
                     if (isEncrypted(target)) {
                         FileInputStream(target).use { existing ->
-                            decryptChunks(existing, output)
+                            nextIndex = reencryptChunks(existing, output)
                         }
                     } else {
                         FileInputStream(target).use { existing ->
-                            existing.copyTo(output)
+                            encryptChunks(existing, output)
+                            nextIndex = chunkCount(target.length())
                         }
                     }
-                }
 
-                FileOutputStream(plaintextTemp, true).use { output ->
-                    input.copyTo(output)
+                    encryptChunks(input, output, nextIndex)
                     output.flush()
                     output.fd.sync()
                 }
 
-                FileInputStream(plaintextTemp).use { combined ->
-                    writeAtomicLocked(target, combined)
-                }
+                atomicReplace(temp, target)
             } finally {
-                plaintextTemp.delete()
+                temp.delete()
             }
         }
     }
@@ -169,6 +172,39 @@ internal class PocketFileCrypto(
         }
     }
 
+    private fun reencryptChunks(input: InputStream, output: OutputStream): Long {
+        readHeader(input)
+        var index = 0L
+
+        while (true) {
+            val lengthBytes = input.readFullyOrNull(LENGTH_BYTES) ?: break
+            val length = ByteBuffer.wrap(lengthBytes)
+                .order(ByteOrder.BIG_ENDIAN)
+                .int
+
+            require(length in 1..CHUNK_BYTES) {
+                "invalid Pocket encrypted chunk length"
+            }
+
+            val oldNonce = input.readFully(NONCE_BYTES)
+            val ciphertext = input.readFully(length + TAG_BYTES)
+            val plaintext = cipher(Cipher.DECRYPT_MODE, oldNonce, index)
+                .doFinal(ciphertext)
+
+            val newNonce = ByteArray(NONCE_BYTES).also(SecureRandom()::nextBytes)
+            val reencrypted = cipher(Cipher.ENCRYPT_MODE, newNonce, index)
+                .doFinal(plaintext)
+
+            writeInt(output, length)
+            output.write(newNonce)
+            output.write(reencrypted)
+
+            index++
+        }
+
+        return index
+    }
+
     private fun decryptChunks(input: InputStream, output: OutputStream) {
         readHeader(input)
         var index = 0L
@@ -209,6 +245,15 @@ internal class PocketFileCrypto(
             .array()
         cipher.updateAAD(aad)
         return cipher
+    }
+
+    private fun chunkCount(fileLength: Long): Long {
+        if (fileLength <= HEADER_BYTES) return 0L
+        var position = HEADER_BYTES.toLong()
+        var count = 0L
+
+        FileInputStream(File("/dev/null")).use { }
+        throw UnsupportedOperationException("chunk count requires stream parsing")
     }
 
     private fun writeHeader(output: OutputStream) {
