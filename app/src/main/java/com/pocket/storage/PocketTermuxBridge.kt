@@ -31,18 +31,21 @@ internal class PocketTermuxBridge(context: Context) {
         }.getOrDefault(false)
     }
 
-    fun startPocketWeb(host: String = "0.0.0.0", port: Int = 8787): Boolean =
-        runCommand(
-            listOf(
-                "pocket",
-                "web",
-                "--host",
-                host,
-                "--port",
-                port.toString()
-            ),
-            background = true
+    fun startPocketWeb(host: String = "0.0.0.0", port: Int = 8787): Boolean {
+        require(Regex("^[0-9A-Za-z.:-]+$").matches(host)) { "invalid host" }
+        require(port in 1..65535) { "invalid port" }
+
+        val script =
+            "nohup pocket web --host $host --port $port " +
+                "> ~/.pocket-web.log 2>&1 & " +
+                "echo $! > ~/.pocket-web.pid"
+
+        return runCommand(
+            listOf("sh", "-lc", script),
+            background = true,
+            executableOverride = "/data/data/com.termux/files/usr/bin/sh"
         )
+    }
 
     fun stopPocketWeb(): Boolean =
         runCommand(
