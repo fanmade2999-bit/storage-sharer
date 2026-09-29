@@ -1,0 +1,18 @@
+#!/data/data/com.termux/files/usr/bin/sh
+set -eu
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
+
+case "${1:-}" in
+  web)
+    shift
+    exec python3 "$ROOT/pocket_web.py" "$@"
+    ;;
+  bootstrap)
+    shift
+    exec sh "$ROOT/bootstrap/install.sh" "$@"
+    ;;
+  *)
+    exec python3 "$ROOT/pocket_client.py" "$@"
+    ;;
+esac
