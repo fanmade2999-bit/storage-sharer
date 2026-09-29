@@ -13,6 +13,9 @@ internal object PocketGattProtocol {
     val CONFIRM_UUID = java.util.UUID.fromString(
         "6f9e7a31-2e8b-4b2e-a65d-0f8d9a4c4d04"
     )
+    val NETWORK_UUID = java.util.UUID.fromString(
+        "6f9e7a31-2e8b-4b2e-a65d-0f8d9a4c4d05"
+    )
 
     private val MAGIC = byteArrayOf(0x50, 0x4b, 0x31)
     private const val MAX_KEY_BYTES = 512
@@ -27,6 +30,11 @@ internal object PocketGattProtocol {
     data class Response(
         val fellowPublicKey: ByteArray,
         val signature: ByteArray
+    )
+
+    data class NetworkCredentials(
+        val ssid: String,
+        val password: String
     )
 
     fun encodeChallenge(ownerPublicKey: ByteArray, nonce: ByteArray): ByteArray {
@@ -136,3 +144,54 @@ internal object PocketGattProtocol {
     fun randomNonce(): ByteArray =
         ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
 }
+
+
+    // The network frame is sent only after the BLE link is bonded and the
+    // mutual-auth transcript has been verified.
+    fun encodeNetworkCredentials(ssid: String, password: String): ByteArray {
+        val ssidBytes = ssid.encodeToByteArray()
+        val passwordBytes = password.encodeToByteArray()
+
+        require(ssidBytes.size in 1..32) { "SSID is invalid" }
+        require(passwordBytes.size in 8..63) { "Wi-Fi password is invalid" }
+
+        return ByteBuffer
+            .allocate(4 + 2 + ssidBytes.size + 2 + passwordBytes.size)
+            .order(ByteOrder.BIG_ENDIAN)
+            .put(byteArrayOf(0x50, 0x4b, 0x57, 0x31))
+            .putShort(ssidBytes.size.toShort())
+            .put(ssidBytes)
+            .putShort(passwordBytes.size.toShort())
+            .put(passwordBytes)
+            .array()
+    }
+
+    fun decodeNetworkCredentials(bytes: ByteArray): NetworkCredentials {
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        require(buffer.remaining() >= 8) { "network frame too short" }
+
+        val magic = ByteArray(4)
+        buffer.get(magic)
+        require(magic.contentEquals(byteArrayOf(0x50, 0x4b, 0x57, 0x31))) {
+            "invalid Pocket network frame"
+        }
+
+        val ssidLength = buffer.short.toInt()
+        require(ssidLength in 1..32)
+        require(buffer.remaining() >= ssidLength + 2)
+
+        val ssidBytes = ByteArray(ssidLength)
+        buffer.get(ssidBytes)
+
+        val passwordLength = buffer.short.toInt()
+        require(passwordLength in 8..63)
+        require(buffer.remaining() == passwordLength)
+
+        val passwordBytes = ByteArray(passwordLength)
+        buffer.get(passwordBytes)
+
+        return NetworkCredentials(
+            ssid = ssidBytes.decodeToString(),
+            password = passwordBytes.decodeToString()
+        )
+    }
