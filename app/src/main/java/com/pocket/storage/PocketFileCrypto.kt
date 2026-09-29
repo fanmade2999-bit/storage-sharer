@@ -11,6 +11,7 @@ import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.SecureRandom
+import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
@@ -28,63 +29,68 @@ internal class PocketFileCrypto(
         private const val LENGTH_BYTES = 4
     }
 
+    private val locks = ConcurrentHashMap<String, Any>()
+
     fun createEmpty(target: File) {
         writeAtomic(target, java.io.ByteArrayInputStream(ByteArray(0)))
     }
 
     fun writeAtomic(target: File, input: InputStream) {
-        target.parentFile?.mkdirs()
-        val temp = File(
-            target.parentFile,
-            ".pocket-" + target.name + "-" + System.nanoTime() + ".tmp"
-        )
-
-        try {
-            FileOutputStream(temp).use { output ->
-                writeHeader(output)
-                encryptChunks(input, output)
-                output.flush()
-                output.fd.sync()
-            }
-            atomicReplace(temp, target)
-        } finally {
-            if (temp.exists()) temp.delete()
+        withLock(target) {
+            writeAtomicLocked(target, input)
         }
     }
 
     fun appendAtomic(target: File, input: InputStream) {
-        if (!target.exists()) {
-            writeAtomic(target, input)
-            return
-        }
-
-        val temp = File(
-            target.parentFile,
-            ".pocket-" + target.name + "-" + System.nanoTime() + ".tmp"
-        )
-
-        try {
-            FileOutputStream(temp).use { output ->
-                FileInputStream(target).use { existing ->
-                    decryptChunks(existing, output)
-                }
-                encryptChunks(input, output, countChunks(target))
-                output.flush()
-                output.fd.sync()
+        withLock(target) {
+            if (!target.exists()) {
+                writeAtomicLocked(target, input)
+                return@withLock
             }
-            atomicReplace(temp, target)
-        } finally {
-            if (temp.exists()) temp.delete()
+
+            val plaintextTemp = tempFile(target, "plain")
+            try {
+                FileOutputStream(plaintextTemp).use { output ->
+                    if (isEncrypted(target)) {
+                        FileInputStream(target).use { existing ->
+                            decryptChunks(existing, output)
+                        }
+                    } else {
+                        FileInputStream(target).use { existing ->
+                            existing.copyTo(output)
+                        }
+                    }
+                }
+
+                FileOutputStream(plaintextTemp, true).use { output ->
+                    input.copyTo(output)
+                    output.flush()
+                    output.fd.sync()
+                }
+
+                FileInputStream(plaintextTemp).use { combined ->
+                    writeAtomicLocked(target, combined)
+                }
+            } finally {
+                plaintextTemp.delete()
+            }
         }
     }
 
     fun readTo(source: File, output: OutputStream) {
         FileInputStream(source).use { input ->
-            decryptChunks(input, output)
+            if (isEncrypted(source)) {
+                decryptChunks(input, output)
+            } else {
+                // Compatibility path for files created before encryption was enabled.
+                input.copyTo(output)
+            }
         }
     }
 
     fun plaintextSize(source: File): Long {
+        if (!isEncrypted(source)) return source.length()
+
         var total = 0L
         FileInputStream(source).use { input ->
             readHeader(input)
@@ -107,6 +113,37 @@ internal class PocketFileCrypto(
         return total
     }
 
+    private fun writeAtomicLocked(target: File, input: InputStream) {
+        target.parentFile?.mkdirs()
+        val temp = tempFile(target, "enc")
+
+        try {
+            FileOutputStream(temp).use { output ->
+                writeHeader(output)
+                encryptChunks(input, output)
+                output.flush()
+                output.fd.sync()
+            }
+            atomicReplace(temp, target)
+        } finally {
+            temp.delete()
+        }
+    }
+
+    private fun tempFile(target: File, kind: String): File =
+        File(
+            target.parentFile,
+            ".pocket-" + target.name + "-" + kind + "-" + System.nanoTime() + ".tmp"
+        )
+
+    private fun isEncrypted(file: File): Boolean {
+        if (!file.isFile || file.length() < MAGIC.size) return false
+        FileInputStream(file).use { input ->
+            val header = input.readFully(MAGIC.size)
+            return header.contentEquals(MAGIC)
+        }
+    }
+
     private fun encryptChunks(
         input: InputStream,
         output: OutputStream,
@@ -120,8 +157,8 @@ internal class PocketFileCrypto(
             if (count <= 0) break
 
             val nonce = ByteArray(NONCE_BYTES).also(SecureRandom()::nextBytes)
-            val cipher = cipher(Cipher.ENCRYPT_MODE, nonce, index)
-            val ciphertext = cipher.doFinal(buffer, 0, count)
+            val ciphertext = cipher(Cipher.ENCRYPT_MODE, nonce, index)
+                .doFinal(buffer, 0, count)
 
             writeInt(output, count)
             output.write(nonce)
@@ -158,24 +195,6 @@ internal class PocketFileCrypto(
             output.write(plaintext)
             index++
         }
-    }
-
-    private fun countChunks(target: File): Long {
-        var count = 0L
-        FileInputStream(target).use { input ->
-            readHeader(input)
-            while (true) {
-                val lengthBytes = input.readFullyOrNull(LENGTH_BYTES) ?: break
-                val length = ByteBuffer.wrap(lengthBytes)
-                    .order(ByteOrder.BIG_ENDIAN)
-                    .int
-                require(length in 0..CHUNK_BYTES)
-                input.skipFully(NONCE_BYTES.toLong())
-                input.skipFully((length + TAG_BYTES).toLong())
-                count++
-            }
-        }
-        return count
     }
 
     private fun cipher(mode: Int, nonce: ByteArray, index: Long): Cipher {
@@ -249,6 +268,11 @@ internal class PocketFileCrypto(
                 StandardCopyOption.REPLACE_EXISTING
             )
         }
+    }
+
+    private inline fun <T> withLock(target: File, block: () -> T): T {
+        val lock = locks.computeIfAbsent(target.canonicalPath) { Any() }
+        return synchronized(lock) { block() }
     }
 }
 
