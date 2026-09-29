@@ -181,7 +181,9 @@ class PocketConnectionService : Service() {
 
                         if (gattClient?.sendNetworkCredentials(
                                 credentials.ssid,
-                                credentials.password
+                                credentials.password,
+                                host,
+                                8787
                             ) != true
                         ) {
                             stopSelf()
