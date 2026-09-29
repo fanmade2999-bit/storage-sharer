@@ -62,13 +62,13 @@ pocket doctor
 pocket connect
 ```
 
-For Android to start Pocket Web through Termux's external command interface, enable Termux external apps in `~/.termux/termux.properties`:
+For Android to start Pocket Web through Termux's external command interface, grant Pocket the Android `Run commands in Termux environment` additional permission, and enable Termux external apps in `~/.termux/termux.properties`:
 
 ```
 allow-external-apps=true
 ```
 
-Restart Termux after changing that setting.
+In Android Settings, open **Pocket Storage → Permissions → Additional permissions** and grant **Run commands in Termux environment**. Restart Termux after changing the Termux property.
 
 ## First Pocket login
 
