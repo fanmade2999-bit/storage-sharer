@@ -370,7 +370,7 @@ class PocketSetupActivity : Activity() {
 
     private fun startFellowBle() {
         gattServer?.stop()
-        gattServer = PocketGattServer(this) {
+        gattServer = PocketGattServer(this) { _, _ ->
             status.text = "Pocket BLE handshake authenticated."
         }
 
