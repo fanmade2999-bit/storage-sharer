@@ -257,43 +257,14 @@ class PocketSetupActivity : Activity() {
 
     private fun connectRegisteredNow(associationId: Int) {
         val fellow = registry.get(associationId)
-        val mac = fellow?.macAddress
-        if (fellow == null || mac.isNullOrBlank()) {
-            status.text = "Fellow BLE address is unavailable."
+        if (fellow == null || !fellow.nearby) {
+            status.text = "Fellow sharer is not currently available."
             return
         }
 
-        val bluetoothManager =
-            getSystemService(android.bluetooth.BluetoothManager::class.java)
-        val adapter = bluetoothManager?.adapter
-        if (adapter == null || !adapter.isEnabled) {
-            status.text = "Bluetooth is disabled."
-            return
-        }
-
-        val device = runCatching { adapter.getRemoteDevice(mac) }.getOrNull()
-        if (device == null) {
-            status.text = "Could not resolve fellow BLE device."
-            return
-        }
-
-        gattClient?.close()
-        gattClient = PocketGattClient(
-            context = this,
-            device = device,
-            associationId = associationId,
-            registry = registry,
-            onAuthenticated = {
-                status.text = "Fellow authenticated. Starting local network…"
-                PocketConnectionService.start(this, associationId)
-            },
-            onFailure = {
-                status.text = "BLE connection failed: $it"
-            }
-        )
-
-        status.text = "Re-authenticating fellow sharer over BLE…"
-        gattClient?.connect()
+        status.text = "Starting authenticated Pocket connection…"
+        PocketConnectionService.start(this, associationId)
+        finish()
     }
 
     override fun onRequestPermissionsResult(
