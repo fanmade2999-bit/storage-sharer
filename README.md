@@ -129,6 +129,6 @@ pocket fellow remove <association_id>
 
 This is experimental software and has not received an independent security audit.
 
-The current release protects data primarily through the Android application sandbox, authenticated IPC, session tokens, path-boundary checks, and Keystore-backed device identity.
+The current release protects data through the Android application sandbox, authenticated IPC, session tokens, path-boundary checks, Keystore-backed device identity, and authenticated AES-GCM file containers.
 
-**Not yet complete:** encrypted file-at-rest storage, automatic encrypted Wi-Fi credential handoff/auto-join on the fellow phone, and device-authenticated Web sessions. Those are separate layers and are not being silently approximated by the current prototype.
+**Still in progress:** device-authenticated Web sessions and a fully automatic fellow-phone Wi-Fi join experience. The current fellow-side Wi-Fi step uses Android network suggestions, so Android remains in control of whether and when the phone joins the local network.
