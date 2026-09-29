@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import shutil
 import sys
 import urllib.parse
 from pathlib import Path
@@ -222,6 +223,50 @@ def write_file(path, source, append=False):
         raise RuntimeError(proc.stderr.decode(errors="replace").strip() or "write failed")
 
 
+def doctor():
+    checks = []
+
+    if shutil.which("python3"):
+        checks.append(("python3", True, shutil.which("python3")))
+    else:
+        checks.append(("python3", False, "missing"))
+
+    try:
+        result = call("ping")
+        checks.append(("Pocket provider", result.get("ok") is True, result.get("service", "unreachable")))
+    except Exception as e:
+        checks.append(("Pocket provider", False, str(e)))
+
+    if STATE_FILE.exists():
+        checks.append(("Session file", True, str(STATE_FILE)))
+    else:
+        checks.append(("Session file", False, "not connected"))
+
+    installed_root = Path(__file__).resolve().parent
+    web_file = installed_root / "pocket_web.py"
+    checks.append(("Pocket Web", web_file.exists(), str(web_file)))
+
+    termux_props = Path.home() / ".termux" / "termux.properties"
+    external = False
+    if termux_props.exists():
+        try:
+            for line in termux_props.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line == "allow-external-apps=true":
+                    external = True
+                    break
+        except OSError:
+            pass
+    checks.append(("Termux external apps", external, str(termux_props)))
+
+    ok = all(value for _, value, _ in checks)
+    for name, passed, detail in checks:
+        print(f"[{'OK' if passed else '!!'}] {name}: {detail}")
+    if not external:
+        print("      Set allow-external-apps=true in ~/.termux/termux.properties")
+    return 0 if ok else 1
+
+
 def launch_setup(action, extras=()):
     command = ["/system/bin/am", "start", "-n", "com.pocket.storage/.PocketSetupActivity", "-a", action]
     for key, value in extras:
@@ -243,6 +288,7 @@ def main():
     fc.add_argument("association_id", type=int)
     fs.add_parser("disconnect")
     s.add_parser("ping")
+    s.add_parser("doctor")
     c = s.add_parser("connect"); c.add_argument("password", nargs="?")
     s.add_parser("disconnect")
     s.add_parser("lock")
@@ -260,6 +306,8 @@ def main():
     try:
         if a.cmd == "ping":
             print(json.dumps(call("ping"), indent=2))
+        elif a.cmd == "doctor":
+            return doctor()
         elif a.cmd == "connect":
             connect(a.password or input("Pocket password: "))
         elif a.cmd == "disconnect":
