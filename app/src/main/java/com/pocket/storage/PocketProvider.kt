@@ -59,6 +59,7 @@ class PocketProvider : ContentProvider() {
     }
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
+        PocketCallerGuard.requireAllowedCaller(requireContext())
         val input = extras ?: Bundle.EMPTY
 
         return when (method) {
@@ -143,6 +144,7 @@ class PocketProvider : ContentProvider() {
         selectionArgs: Array<String>?,
         sortOrder: String?
     ): Cursor {
+        PocketCallerGuard.requireAllowedCaller(requireContext())
         val session = uri.getQueryParameter("session")
         auth.requireSession(session)
         require(!auth.mustChangePassword) { "password change required" }
@@ -176,6 +178,7 @@ class PocketProvider : ContentProvider() {
         }
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+        PocketCallerGuard.requireAllowedCaller(requireContext())
         val session = uri.getQueryParameter("session")
         auth.requireSession(session)
         require(!auth.mustChangePassword) { "password change required" }
@@ -220,6 +223,7 @@ class PocketProvider : ContentProvider() {
     }
 
     override fun insert(uri: Uri, values: ContentValues?): Uri {
+        PocketCallerGuard.requireAllowedCaller(requireContext())
         val input = values ?: error("values are required")
         val session = input.getAsString("session").orEmpty()
         auth.requireSession(session)
@@ -248,6 +252,7 @@ class PocketProvider : ContentProvider() {
     }
 
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<String>?): Int {
+        PocketCallerGuard.requireAllowedCaller(requireContext())
         val session = uri.getQueryParameter("session")
         auth.requireSession(session)
         require(!auth.mustChangePassword) { "password change required" }
@@ -267,6 +272,7 @@ class PocketProvider : ContentProvider() {
         selection: String?,
         selectionArgs: Array<String>?
     ): Int {
+        PocketCallerGuard.requireAllowedCaller(requireContext())
         val input = values ?: error("values are required")
         val session = input.getAsString("session").orEmpty()
         auth.requireSession(session)
