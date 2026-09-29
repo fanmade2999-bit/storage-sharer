@@ -167,26 +167,34 @@ class PocketConnectionService : Service() {
     private fun startLocalNetwork(associationId: Int) {
         val started = hotspot.start(
             onStarted = { credentials ->
-                val webStarted = termux.startPocketWeb(
-                    host = "0.0.0.0",
-                    port = 8787
+                hotspot.findHotspotHostAddress(
+                    onFound = { host ->
+                        val webStarted = termux.startPocketWeb(
+                            host = host,
+                            port = 8787
+                        )
+
+                        if (!webStarted) {
+                            stopSelf()
+                            return@findHotspotHostAddress
+                        }
+
+                        if (gattClient?.sendNetworkCredentials(
+                                credentials.ssid,
+                                credentials.password
+                            ) != true
+                        ) {
+                            stopSelf()
+                            return@findHotspotHostAddress
+                        }
+
+                        updateNotification("Wi-Fi $host:8787 ready")
+                    },
+                    onFailed = {
+                        updateNotification("Could not isolate Pocket Web to hotspot")
+                        stopSelf()
+                    }
                 )
-
-                if (!webStarted) {
-                    stopSelf()
-                    return@start
-                }
-
-                if (gattClient?.sendNetworkCredentials(
-                        credentials.ssid,
-                        credentials.password
-                    ) != true
-                ) {
-                    stopSelf()
-                    return@start
-                }
-
-                updateNotification("Wi-Fi ready • Pocket Web :8787")
             },
             onFailed = {
                 stopSelf()
