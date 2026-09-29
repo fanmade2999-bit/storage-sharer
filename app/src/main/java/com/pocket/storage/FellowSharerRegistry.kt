@@ -8,6 +8,7 @@ internal data class FellowSharer(
     val associationId: Int,
     val label: String,
     val macAddress: String?,
+    val publicKeyBase64: String?,
     val registeredAt: Long,
     val nearby: Boolean,
     val lastSeenAt: Long?
@@ -32,6 +33,7 @@ internal class FellowSharerRegistry(context: Context) {
             associationId = associationId,
             label = label.ifBlank { "Fellow $associationId" },
             macAddress = macAddress,
+            publicKeyBase64 = null,
             registeredAt = System.currentTimeMillis(),
             nearby = false,
             lastSeenAt = null
@@ -43,6 +45,12 @@ internal class FellowSharerRegistry(context: Context) {
         prefs.edit().putStringSet(KEY_IDS, ids).apply()
 
         return record
+    }
+
+    @Synchronized
+    fun setPublicKey(associationId: Int, publicKeyBase64: String) {
+        val current = get(associationId) ?: return
+        save(current.copy(publicKeyBase64 = publicKeyBase64))
     }
 
     @Synchronized
@@ -89,6 +97,7 @@ internal class FellowSharerRegistry(context: Context) {
             .put("association_id", record.associationId)
             .put("label", record.label)
             .put("mac_address", record.macAddress)
+            .put("public_key", record.publicKeyBase64)
             .put("registered_at", record.registeredAt)
             .put("nearby", record.nearby)
             .put("last_seen_at", record.lastSeenAt)
@@ -101,6 +110,7 @@ internal class FellowSharerRegistry(context: Context) {
                 associationId = json.getInt("association_id"),
                 label = json.getString("label"),
                 macAddress = if (json.isNull("mac_address")) null else json.getString("mac_address"),
+                publicKeyBase64 = if (json.isNull("public_key")) null else json.getString("public_key"),
                 registeredAt = json.getLong("registered_at"),
                 nearby = json.getBoolean("nearby"),
                 lastSeenAt = if (json.isNull("last_seen_at")) null else json.getLong("last_seen_at")
