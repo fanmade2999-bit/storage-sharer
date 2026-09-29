@@ -63,10 +63,15 @@ class PocketFellowService : Service() {
             onAuthenticated = { _, _ ->
                 updateNotification("Pocket owner authenticated")
             },
-            onNetworkCredentials = { ssid, password ->
-                val accepted = wifiJoin.suggestAndConnect(ssid, password)
+            onNetworkCredentials = { network ->
+                val accepted = wifiJoin.suggestAndConnect(
+                    network.ssid,
+                    network.password
+                )
                 if (accepted) {
-                    updateNotification("Wi-Fi network provisioned for Pocket connection")
+                    updateNotification(
+                        "Wi-Fi ready • http://" + network.host + ":" + network.port
+                    )
                 }
                 accepted
             }
