@@ -309,6 +309,7 @@ def main():
     fs.add_parser("disconnect")
     s.add_parser("ping")
     s.add_parser("doctor")
+    s.add_parser("migrate")
     c = s.add_parser("connect"); c.add_argument("password", nargs="?")
     s.add_parser("disconnect")
     s.add_parser("lock")
@@ -328,6 +329,10 @@ def main():
             print(json.dumps(call("ping"), indent=2))
         elif a.cmd == "doctor":
             return doctor()
+        elif a.cmd == "migrate":
+            token = require_session()
+            result = call("migrate", (("session", "s", token),))
+            print(f"Migrated {result.get('migrated', 0)} plaintext file(s) to encrypted storage.")
         elif a.cmd == "connect":
             connect(a.password or input("Pocket password: "))
         elif a.cmd == "disconnect":
