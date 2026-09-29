@@ -24,6 +24,8 @@ class PocketProvider : ContentProvider() {
         private const val METHOD_LOCK = "lock"
         private const val METHOD_PING = "ping"
         private const val METHOD_WHOAMI = "whoami"
+        private const val METHOD_LS = "ls"
+        private const val METHOD_STAT = "stat"
 
         private const val PATH_FILES = "files"
         private const val PATH_FILE = "file"
@@ -92,6 +94,20 @@ class PocketProvider : ContentProvider() {
                 }
             }
 
+            METHOD_LS -> {
+                val session = input.getString("session").orEmpty()
+                auth.requireSession(session)
+                require(!auth.mustChangePassword) { "password change required" }
+                listBundle(input.getString("path").orEmpty())
+            }
+
+            METHOD_STAT -> {
+                val session = input.getString("session").orEmpty()
+                auth.requireSession(session)
+                require(!auth.mustChangePassword) { "password change required" }
+                statBundle(input.getString("path").orEmpty())
+            }
+
             else -> super.call(method, arg, extras)
         }
     }
@@ -105,6 +121,7 @@ class PocketProvider : ContentProvider() {
     ): Cursor {
         val session = uri.getQueryParameter("session")
         auth.requireSession(session)
+        require(!auth.mustChangePassword) { "password change required" }
 
         val relativePath = uri.getQueryParameter("path").orEmpty()
         val target = if (relativePath.isBlank()) root else PocketPaths.resolve(root, relativePath)
@@ -136,6 +153,7 @@ class PocketProvider : ContentProvider() {
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         val session = uri.getQueryParameter("session")
         auth.requireSession(session)
+        require(!auth.mustChangePassword) { "password change required" }
 
         val relativePath = decodePathAfter(uri, PATH_FILE)
         val target = PocketPaths.resolve(root, relativePath)
@@ -143,12 +161,19 @@ class PocketProvider : ContentProvider() {
         if (mode.contains('w')) {
             target.parentFile?.mkdirs()
             if (!target.exists()) target.createNewFile()
+            val append = uri.getQueryParameter("append") == "true"
 
             return ParcelFileDescriptor.open(
                 target,
-                ParcelFileDescriptor.MODE_CREATE or
-                    ParcelFileDescriptor.MODE_WRITE_ONLY or
-                    ParcelFileDescriptor.MODE_TRUNCATE
+                if (append) {
+                    ParcelFileDescriptor.MODE_CREATE or
+                        ParcelFileDescriptor.MODE_WRITE_ONLY or
+                        ParcelFileDescriptor.MODE_APPEND
+                } else {
+                    ParcelFileDescriptor.MODE_CREATE or
+                        ParcelFileDescriptor.MODE_WRITE_ONLY or
+                        ParcelFileDescriptor.MODE_TRUNCATE
+                }
             )
         }
 
@@ -163,6 +188,7 @@ class PocketProvider : ContentProvider() {
         val input = values ?: error("values are required")
         val session = input.getAsString("session").orEmpty()
         auth.requireSession(session)
+        require(!auth.mustChangePassword) { "password change required" }
 
         val relativePath = input.getAsString("path").orEmpty()
         val target = PocketPaths.resolve(root, relativePath)
@@ -189,6 +215,7 @@ class PocketProvider : ContentProvider() {
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<String>?): Int {
         val session = uri.getQueryParameter("session")
         auth.requireSession(session)
+        require(!auth.mustChangePassword) { "password change required" }
 
         val relativePath = uri.getQueryParameter("path").orEmpty()
         val target = PocketPaths.resolve(root, relativePath)
@@ -207,6 +234,7 @@ class PocketProvider : ContentProvider() {
         val input = values ?: error("values are required")
         val session = input.getAsString("session").orEmpty()
         auth.requireSession(session)
+        require(!auth.mustChangePassword) { "password change required" }
 
         val sourcePath = input.getAsString("path").orEmpty()
         val destinationPath = input.getAsString("rename_to").orEmpty()
@@ -223,6 +251,30 @@ class PocketProvider : ContentProvider() {
         destination.parentFile?.mkdirs()
         require(source.renameTo(destination)) { "rename failed" }
         return 1
+    }
+
+    private fun listBundle(relativePath: String): Bundle {
+        val target = if (relativePath.isBlank()) root else PocketPaths.resolve(root, relativePath)
+        require(target.isDirectory) { "not a directory" }
+        val items = target.listFiles()?.sortedBy { it.name.lowercase() } ?: emptyList()
+        return Bundle().apply {
+            putString("path", if (relativePath.isBlank()) "/" else "/" + PocketPaths.cleanRelative(relativePath))
+            putParcelableArrayList("items", ArrayList(items.map { fileBundle(it) }))
+        }
+    }
+
+    private fun statBundle(relativePath: String): Bundle {
+        val target = PocketPaths.resolve(root, relativePath)
+        require(target.exists()) { "path does not exist" }
+        return fileBundle(target)
+    }
+
+    private fun fileBundle(file: File): Bundle = Bundle().apply {
+        putString("path", "/" + file.relativeTo(root).path.replace(File.separatorChar, '/'))
+        putString("name", file.name)
+        putBoolean("is_directory", file.isDirectory)
+        putLong("size", if (file.isFile) file.length() else 0L)
+        putLong("modified", file.lastModified())
     }
 
     private fun fileRow(file: File): Array<Any> = arrayOf(
